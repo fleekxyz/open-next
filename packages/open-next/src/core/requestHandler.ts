@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-
 import {
   IncomingMessage,
   OpenNextNodeResponse,
@@ -11,9 +9,6 @@ import { debug, error, warn } from "../adapters/logger";
 import { convertRes, createServerResponse, proxyRequest } from "./routing/util";
 import routingHandler, { MiddlewareOutputEvent } from "./routingHandler";
 import { requestHandler, setNextjsPrebundledReact } from "./util";
-
-// This is used to identify requests in the cache
-globalThis.__als = new AsyncLocalStorage<string>();
 
 export async function openNextHandler(
   internalEvent: InternalEvent,
@@ -81,37 +76,40 @@ export async function openNextHandler(
       remoteAddress: preprocessedEvent.remoteAddress,
     };
     const requestId = Math.random().toString(36);
-    const internalResult = await globalThis.__als.run(requestId, async () => {
-      const preprocessedResult = preprocessResult as MiddlewareOutputEvent;
-      const req = new IncomingMessage(reqProps);
-      const res = createServerResponse(
-        preprocessedEvent,
-        overwrittenResponseHeaders,
-        responseStreaming,
-      );
 
-      await processRequest(
-        req,
-        res,
-        preprocessedEvent,
-        preprocessedResult.isExternalRewrite,
-      );
+    const preprocessedResult = preprocessResult as MiddlewareOutputEvent;
+    const req = new IncomingMessage(reqProps);
+    const res = createServerResponse(
+      preprocessedEvent,
+      overwrittenResponseHeaders,
+      responseStreaming,
+    );
 
-      const { statusCode, headers, isBase64Encoded, body } = convertRes(res);
+    await processRequest(
+      req,
+      res,
+      preprocessedEvent,
+      preprocessedResult.isExternalRewrite,
+    );
 
-      const internalResult = {
-        type: internalEvent.type,
-        statusCode,
-        headers,
-        body,
-        isBase64Encoded,
-      };
+    const {
+      statusCode,
+      headers: _headers,
+      isBase64Encoded,
+      body,
+    } = convertRes(res);
 
-      // reset lastModified. We need to do this to avoid memory leaks
-      delete globalThis.lastModified[requestId];
+    const internalResult = {
+      type: internalEvent.type,
+      statusCode,
+      headers: _headers,
+      body,
+      isBase64Encoded,
+    };
 
-      return internalResult;
-    });
+    // reset lastModified. We need to do this to avoid memory leaks
+    delete globalThis.lastModified[requestId];
+
     return internalResult;
   }
 }

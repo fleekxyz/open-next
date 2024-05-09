@@ -40,8 +40,6 @@ declare global {
   var _ROUTES: EdgeRoute[];
   var __storage__: Map<unknown, unknown>;
   var AsyncContext: any;
-  //@ts-ignore
-  var AsyncLocalStorage: any;
 }
 
 export interface EdgeRoute {
