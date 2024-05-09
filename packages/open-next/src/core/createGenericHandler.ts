@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type {
   BaseEventOrResult,
   DefaultOverrideOptions,
@@ -8,6 +10,7 @@ import type {
 } from "types/open-next";
 
 import { debug } from "../adapters/logger";
+import openNextConfig from "./dummy.config";
 import { resolveConverter, resolveWrapper } from "./resolve";
 
 declare global {
@@ -24,7 +27,7 @@ type HandlerType =
 type GenericHandler<
   Type extends HandlerType,
   E extends BaseEventOrResult = InternalEvent,
-  R extends BaseEventOrResult = InternalResult,
+  R extends BaseEventOrResult = InternalResult
 > = {
   handler: OpenNextHandler<E, R>;
   type: Type;
@@ -33,14 +36,11 @@ type GenericHandler<
 export async function createGenericHandler<
   Type extends HandlerType,
   E extends BaseEventOrResult = InternalEvent,
-  R extends BaseEventOrResult = InternalResult,
+  R extends BaseEventOrResult = InternalResult
 >(handler: GenericHandler<Type, E, R>) {
-  //First we load the config
-  // @ts-expect-error
-  const config: OpenNextConfig = await import("./open-next.config.mjs").then(
-    (m) => m.default,
-  );
+  const config: OpenNextConfig = openNextConfig as OpenNextConfig;
 
+  (globalThis as any).AsyncLocalStorage = AsyncLocalStorage;
   globalThis.openNextConfig = config;
   const override = config[handler.type]
     ?.override as any as DefaultOverrideOptions<E, R>;

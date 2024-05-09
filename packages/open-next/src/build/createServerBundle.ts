@@ -105,12 +105,12 @@ export async function createServerBundle(
   }
 
   // Generate default function
-  await generateBundle("default", config, options, {
-    ...defaultFn,
-    // @ts-expect-error - Those string are RouteTemplate
-    routes: Array.from(remainingRoutes),
-    patterns: ["*"],
-  });
+  // await generateBundle("default", config, options, {
+  //   ...defaultFn,
+  //   // @ts-expect-error - Those string are RouteTemplate
+  //   routes: Array.from(remainingRoutes),
+  //   patterns: ["*"],
+  // });
 }
 
 async function generateBundle(

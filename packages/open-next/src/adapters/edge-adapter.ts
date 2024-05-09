@@ -63,11 +63,11 @@ const defaultHandler = async (
   };
 };
 
-export const handler = await createGenericHandler({
+export const main = await createGenericHandler({
   handler: defaultHandler,
   type: "middleware",
 });
 
 export default {
-  fetch: handler,
+  fetch: main,
 };

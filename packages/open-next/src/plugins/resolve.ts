@@ -36,11 +36,18 @@ export function openNextResolvePlugin({
       logger.debug(`OpenNext Resolve plugin for ${fnName}`);
       build.onLoad({ filter: /core\/resolve.js/g }, async (args) => {
         let contents = readFileSync(args.path, "utf-8");
-        if (overrides?.wrapper && typeof overrides.wrapper === "string") {
-          contents = contents.replace(
-            "../wrappers/aws-lambda.js",
-            `../wrappers/${overrides.wrapper}.js`,
-          );
+        if (overrides?.wrapper) {
+          if (typeof overrides.wrapper === "function") {
+            contents = contents.replace(
+              "../wrappers/aws-lambda.js",
+              `../wrappers/dummy.js`,
+            );
+          } else if (typeof overrides.wrapper === "string") {
+            contents = contents.replace(
+              "../wrappers/aws-lambda.js",
+              `../wrappers/${overrides.wrapper}.js`,
+            );
+          }
         }
         if (overrides?.converter) {
           if (typeof overrides.converter === "function") {
