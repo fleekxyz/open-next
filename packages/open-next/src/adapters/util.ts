@@ -1,7 +1,7 @@
 //TODO: We should probably move all the utils to a separate location
 
 export function setNodeEnv() {
-  process.env.NODE_ENV = process.env.NODE_ENV ?? "production";
+  // process.env.NODE_ENV = process.env.NODE_ENV ?? "production";
 }
 
 export function generateUniqueId() {

@@ -48,13 +48,17 @@ export function openNextResolvePlugin({
         let contents = readFileSync(args.path, "utf-8");
         //TODO: refactor this. Every override should be at the same place so we can generate this dynamically
         if (overrides?.wrapper) {
-          contents = contents.replace(
-            "../wrappers/aws-lambda.js",
-            `../wrappers/${getOverrideOrDefault(
-              overrides.wrapper,
-              "aws-lambda",
-            )}.js`,
-          );
+          if (typeof overrides.wrapper === "function") {
+            contents = contents.replace(
+              "../wrappers/aws-lambda.js",
+              `../wrappers/dummy.js`,
+            );
+          } else if (typeof overrides.wrapper === "string") {
+            contents = contents.replace(
+              "../wrappers/aws-lambda.js",
+              `../wrappers/${overrides.wrapper}.js`,
+            );
+          }
         }
         if (overrides?.converter) {
           contents = contents.replace(

@@ -42,10 +42,19 @@ export type PublicFiles = {
   files: string[];
 };
 
-export async function build(
-  openNextConfigPath?: string,
-  nodeExternals?: string,
-) {
+export type BuildArgs = {
+  openNextConfigPath?: string;
+  nodeExternals?: string;
+  skipBuild?: boolean;
+  standaloneMode?: boolean;
+};
+
+export async function build({
+  openNextConfigPath,
+  nodeExternals,
+  skipBuild,
+  standaloneMode,
+}: BuildArgs) {
   showWindowsWarning();
 
   // Load open-next.config.ts
@@ -83,8 +92,14 @@ export async function build(
 
   // Build Next.js app
   printHeader("Building Next.js app");
-  setStandaloneBuildMode(monorepoRoot);
-  buildNextjsApp(packager);
+
+  if (standaloneMode) {
+    setStandaloneBuildMode(monorepoRoot);
+  }
+
+  if (!skipBuild) {
+    await buildNextjsApp(packager);
+  }
 
   // Generate deployable bundle
   printHeader("Generating bundle");
@@ -735,16 +750,19 @@ async function createMiddleware() {
     appBuildOutputPath,
   };
 
+  const openNextConfigPath = path.join(options.tempDir, "open-next.config.mjs");
+
   if (config.middleware?.external) {
     outputPath = path.join(outputDir, "middleware");
     fs.mkdirSync(outputPath, { recursive: true });
 
     // Copy open-next.config.mjs
-    copyOpenNextConfig(
-      options.tempDir,
-      outputPath,
-      config.middleware.override?.wrapper === "cloudflare",
-    );
+    // We want it bundled so we don't need to copy it to the output folder
+    // copyOpenNextConfig(
+    //   options.tempDir,
+    //   outputPath,
+    //   config.middleware.override?.wrapper === "cloudflare",
+    // );
 
     // Bundle middleware
     await buildEdgeBundle({
@@ -754,12 +772,14 @@ async function createMiddleware() {
       overrides: config.middleware?.override,
       defaultConverter: "aws-cloudfront",
       includeCache: config.dangerous?.enableCacheInterception,
+      openNextConfigPath,
     });
   } else {
     await buildEdgeBundle({
       entrypoint: path.join(__dirname, "core", "edgeFunctionHandler.js"),
       outfile: path.join(outputDir, ".build", "middleware.mjs"),
       ...commonMiddlewareOptions,
+      openNextConfigPath,
     });
   }
 }

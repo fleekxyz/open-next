@@ -182,7 +182,7 @@ export async function generateOutput(
   Object.entries(config.functions ?? {}).forEach(async ([key, value]) => {
     if (value.placement === "global") {
       edgeFunctions[key] = {
-        bundle: `.open-next/functions/${key}`,
+        bundle: `.open-next/server-functions/${key}`,
         handler: "index.handler",
         ...(await extractOverrideFn(value.override)),
       };

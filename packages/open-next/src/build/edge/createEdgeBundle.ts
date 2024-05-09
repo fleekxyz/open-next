@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
-import url from "node:url";
+import url, { fileURLToPath } from "node:url";
 
+import { nodeModulesPolyfillPlugin } from "esbuild-plugins-node-modules-polyfill";
 import fs from "fs";
 import path from "path";
 import { MiddlewareInfo, MiddlewareManifest } from "types/next-types";
@@ -15,7 +16,7 @@ import logger from "../../logger.js";
 import { openNextEdgePlugins } from "../../plugins/edge.js";
 import { openNextReplacementPlugin } from "../../plugins/replacement.js";
 import { openNextResolvePlugin } from "../../plugins/resolve.js";
-import { BuildOptions, copyOpenNextConfig, esbuildAsync } from "../helper.js";
+import { BuildOptions, esbuildAsync } from "../helper.js";
 
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
 
@@ -29,6 +30,7 @@ interface BuildEdgeBundleOptions {
   defaultConverter?: IncludedConverter;
   additionalInject?: string;
   includeCache?: boolean;
+  openNextConfigPath: string;
 }
 
 export async function buildEdgeBundle({
@@ -41,6 +43,7 @@ export async function buildEdgeBundle({
   overrides,
   additionalInject,
   includeCache,
+  openNextConfigPath,
 }: BuildEdgeBundleOptions) {
   await esbuildAsync(
     {
@@ -52,6 +55,37 @@ export async function buildEdgeBundle({
       target: "es2022",
       platform: "neutral",
       plugins: [
+        {
+          name: "replace-async-local-storage",
+          setup(build) {
+            build.onResolve({ filter: /async_hooks/ }, (args) => {
+              if (
+                args.path === "async_hooks" ||
+                args.path === "node:async_hooks"
+              ) {
+                return {
+                  path: path.resolve(
+                    path.dirname(fileURLToPath(import.meta.url)),
+                    "polyfill",
+                    "async_hooks.js"
+                  ),
+                  namespace: "replace-als",
+                };
+              }
+            });
+
+            build.onLoad(
+              { filter: /.*/, namespace: "replace-als" },
+              async (args) => {
+                const contents = await fs.promises.readFile(args.path, "utf8");
+                return {
+                  contents,
+                  loader: "js",
+                };
+              }
+            );
+          },
+        },
         openNextResolvePlugin({
           overrides: {
             wrapper:
@@ -91,23 +125,58 @@ export async function buildEdgeBundle({
           edgeFunctionHandlerPath: path.join(
             __dirname,
             "../../core",
-            "edgeFunctionHandler.js",
+            "edgeFunctionHandler.js"
           ),
-          isInCloudfare: overrides?.wrapper === "cloudflare",
+          useFilesystem:
+            overrides?.wrapper === "cloudflare" ||
+            typeof overrides?.wrapper === "function",
         }),
+        nodeModulesPolyfillPlugin({
+          globals: {
+            Buffer: true,
+          },
+          // fallback: "empty",
+          modules: {
+            async_hooks: false,
+            buffer: true,
+            path: true,
+            stream: true,
+            zlib: true,
+            crypto: true,
+            https: true,
+          },
+        }),
+        {
+          name: "replace-open-next-config",
+          setup(build) {
+            build.onResolve({ filter: /\.\/dummy\.config/ }, () => {
+              return {
+                path: openNextConfigPath,
+                namespace: "replace-onc",
+              };
+            });
+
+            build.onLoad(
+              { filter: /.*/, namespace: "replace-onc" },
+              async (args) => {
+                const contents = await fs.readFileSync(args.path, "utf-8");
+                return {
+                  contents,
+                  loader: "js",
+                };
+              }
+            );
+          },
+        },
       ],
       treeShaking: true,
-      alias: {
-        path: "node:path",
-        stream: "node:stream",
-        fs: "node:fs",
-      },
       conditions: ["module"],
       mainFields: ["module", "main"],
       banner: {
         js: `
   ${
-    overrides?.wrapper === "cloudflare"
+    overrides?.wrapper === "cloudflare" ||
+    typeof overrides?.wrapper === "function"
       ? ""
       : `
   const require = (await import("node:module")).createRequire(import.meta.url);
@@ -126,8 +195,22 @@ export async function buildEdgeBundle({
   ${additionalInject ?? ""}
   `,
       },
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        "process.env.NEXT_RUNTIME": '"edge"',
+        "process.env.NEXT_PRIVATE_TEST_PROXY": '"false"',
+        "process.env.MAX_REVALIDATE_CONCURRENCY": "10",
+        "process.env.NEXT_OTEL_VERBOSE": "0",
+        "process.env.NEXT_PRIVATE_DEBUG_CACHE": '"false"',
+        "process.env.SUSPENSE_CACHE_URL": '"http://foo.com"',
+        "process.env.SUSPENSE_CACHE_BASEPATH": '"/cache"',
+        "process.env.SUSPENSE_CACHE_AUTH_TOKEN": '"foo"',
+        "process.env.__NEXT_TEST_MAX_ISR_CACHE": "10",
+        "process.env.__NEXT_INCREMENTAL_CACHE_IPC_PORT": "8080",
+        "process.env.__NEXT_INCREMENTAL_CACHE_IPC_KEY": '"foo"',
+      },
     },
-    options,
+    options
   );
 }
 
@@ -146,7 +229,12 @@ export async function generateEdgeBundle(
   fs.mkdirSync(outputPath, { recursive: true });
 
   // Copy open-next.config.mjs
-  copyOpenNextConfig(path.join(outputDir, ".build"), outputPath, true);
+  // copyOpenNextConfig(path.join(outputDir, ".build"), outputPath, true);
+  const openNextConfigPath = path.join(
+    outputDir,
+    ".build",
+    "open-next.config.mjs",
+  );
 
   // Load middleware manifest
   const middlewareManifest = JSON.parse(
@@ -158,7 +246,7 @@ export async function generateEdgeBundle(
 
   // Find functions
   const functions = Object.values(middlewareManifest.functions).filter((fn) =>
-    fnOptions.routes.includes(fn.name as RouteTemplate),
+    fnOptions.routes.includes(fn.name as RouteTemplate)
   );
 
   if (functions.length > 1) {
@@ -167,23 +255,33 @@ export async function generateEdgeBundle(
   const fn = functions[0];
 
   //Copy wasm files
-  const wasmFiles = fn.wasm;
-  mkdirSync(path.join(outputPath, "wasm"), { recursive: true });
-  for (const wasmFile of wasmFiles) {
-    fs.copyFileSync(
-      path.join(appBuildOutputPath, ".next", wasmFile.filePath),
-      path.join(outputPath, `wasm/${wasmFile.name}.wasm`),
-    );
+  try {
+    const wasmFiles = fn.wasm;
+    mkdirSync(path.join(outputPath, "wasm"), { recursive: true });
+    for (const wasmFile of wasmFiles) {
+      fs.copyFileSync(
+        path.join(appBuildOutputPath, ".next", wasmFile.filePath),
+        path.join(outputPath, `wasm/${wasmFile.name}.wasm`),
+      );
+    }
+  } catch (error) {
+    logger.info(`Failed to copy wasm files for: ${name}`);
+    console.log(error);
   }
 
   // Copy assets
-  const assets = fn.assets;
-  mkdirSync(path.join(outputPath, "assets"), { recursive: true });
-  for (const asset of assets) {
-    fs.copyFileSync(
-      path.join(appBuildOutputPath, ".next", asset.filePath),
-      path.join(outputPath, `assets/${asset.name}`),
-    );
+  try {
+    const assets = fn.assets;
+    mkdirSync(path.join(outputPath, "assets"), { recursive: true });
+    for (const asset of assets) {
+      fs.copyFileSync(
+        path.join(appBuildOutputPath, ".next", asset.filePath),
+        path.join(outputPath, `assets/${asset.name}`),
+      );
+    }
+  } catch (error) {
+    logger.info(`Failed to copy assets for: ${name}`);
+    console.log(error);
   }
 
   await buildEdgeBundle({
@@ -193,5 +291,6 @@ export async function generateEdgeBundle(
     outfile: path.join(outputPath, "index.mjs"),
     options,
     overrides: fnOptions.override,
+    openNextConfigPath,
   });
 }
