@@ -67,7 +67,7 @@ export async function buildEdgeBundle({
                   path: path.resolve(
                     path.dirname(fileURLToPath(import.meta.url)),
                     "polyfill",
-                    "async_hooks.js"
+                    "async_hooks.js",
                   ),
                   namespace: "replace-als",
                 };
@@ -82,7 +82,7 @@ export async function buildEdgeBundle({
                   contents,
                   loader: "js",
                 };
-              }
+              },
             );
           },
         },
@@ -125,7 +125,7 @@ export async function buildEdgeBundle({
           edgeFunctionHandlerPath: path.join(
             __dirname,
             "../../core",
-            "edgeFunctionHandler.js"
+            "edgeFunctionHandler.js",
           ),
           useFilesystem:
             overrides?.wrapper === "cloudflare" ||
@@ -164,7 +164,7 @@ export async function buildEdgeBundle({
                   contents,
                   loader: "js",
                 };
-              }
+              },
             );
           },
         },
@@ -210,7 +210,7 @@ export async function buildEdgeBundle({
         "process.env.__NEXT_INCREMENTAL_CACHE_IPC_KEY": '"foo"',
       },
     },
-    options
+    options,
   );
 }
 
@@ -246,7 +246,7 @@ export async function generateEdgeBundle(
 
   // Find functions
   const functions = Object.values(middlewareManifest.functions).filter((fn) =>
-    fnOptions.routes.includes(fn.name as RouteTemplate)
+    fnOptions.routes.includes(fn.name as RouteTemplate),
   );
 
   if (functions.length > 1) {

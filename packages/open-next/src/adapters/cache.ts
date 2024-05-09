@@ -197,7 +197,8 @@ export default class S3Cache {
         // If some tags are stale we need to force revalidation
         return null;
       }
-      const requestId = globalThis.__als.getStore()?.requestId ?? "";
+      // const requestId = globalThis.__als.getStore()?.requestId ?? "";
+      const requestId = "";
       globalThis.lastModified[requestId] = _lastModified;
       if (cacheData?.type === "route") {
         return {

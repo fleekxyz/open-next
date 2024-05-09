@@ -32,7 +32,7 @@ const converter: Converter = {
       ),
       remoteAddress:
         (req.headers["x-forwarded-for"] as string) ??
-        req.socket.remoteAddress ??
+        req?.socket?.remoteAddress ??
         "::1",
       query,
       cookies: Object.fromEntries(

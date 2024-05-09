@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-
 import {
   IncomingMessage,
   OpenNextNodeResponse,
@@ -14,14 +12,14 @@ import { convertRes, createServerResponse, proxyRequest } from "./routing/util";
 import routingHandler, { MiddlewareOutputEvent } from "./routingHandler";
 import { requestHandler, setNextjsPrebundledReact } from "./util";
 
-// This is used to identify requests in the cache
-globalThis.__als = new AsyncLocalStorage<{
-  requestId: string;
-  pendingPromiseRunner: DetachedPromiseRunner;
-  isISRRevalidation?: boolean;
-}>();
+// // This is used to identify requests in the cache
+// globalThis.__als = new AsyncLocalStorage<{
+//   requestId: string;
+//   pendingPromiseRunner: DetachedPromiseRunner;
+//   isISRRevalidation?: boolean;
+// }>();
 
-patchAsyncStorage();
+// patchAsyncStorage();
 
 export async function openNextHandler(
   internalEvent: InternalEvent,
@@ -100,45 +98,39 @@ export async function openNextHandler(
       remoteAddress: preprocessedEvent.remoteAddress,
     };
     const requestId = Math.random().toString(36);
-    const pendingPromiseRunner: DetachedPromiseRunner =
-      new DetachedPromiseRunner();
-    const isISRRevalidation = headers["x-isr"] === "1";
-    const internalResult = await globalThis.__als.run(
-      { requestId, pendingPromiseRunner, isISRRevalidation },
-      async () => {
-        const preprocessedResult = preprocessResult as MiddlewareOutputEvent;
-        const req = new IncomingMessage(reqProps);
-        const res = createServerResponse(
-          preprocessedEvent,
-          overwrittenResponseHeaders,
-          responseStreaming,
-        );
-
-        await processRequest(
-          req,
-          res,
-          preprocessedEvent,
-          preprocessedResult.isExternalRewrite,
-        );
-
-        const { statusCode, headers, isBase64Encoded, body } = convertRes(res);
-
-        const internalResult = {
-          type: internalEvent.type,
-          statusCode,
-          headers,
-          body,
-          isBase64Encoded,
-        };
-
-        // reset lastModified. We need to do this to avoid memory leaks
-        delete globalThis.lastModified[requestId];
-
-        await pendingPromiseRunner.await();
-
-        return internalResult;
-      },
+    const preprocessedResult = preprocessResult as MiddlewareOutputEvent;
+    const req = new IncomingMessage(reqProps);
+    const res = createServerResponse(
+      preprocessedEvent,
+      overwrittenResponseHeaders,
+      responseStreaming,
     );
+
+    await processRequest(
+      req,
+      res,
+      preprocessedEvent,
+      preprocessedResult.isExternalRewrite,
+    );
+
+    const {
+      statusCode,
+      headers: _headers,
+      isBase64Encoded,
+      body,
+    } = convertRes(res);
+
+    const internalResult = {
+      type: internalEvent.type,
+      statusCode,
+      headers: _headers,
+      body,
+      isBase64Encoded,
+    };
+
+    // reset lastModified. We need to do this to avoid memory leaks
+    delete globalThis.lastModified[requestId];
+
     return internalResult;
   }
 }

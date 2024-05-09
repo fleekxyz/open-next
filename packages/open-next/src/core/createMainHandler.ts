@@ -1,7 +1,7 @@
-import type { AsyncLocalStorage } from "node:async_hooks";
+// import type { AsyncLocalStorage } from "node:async_hooks";
 
-import type { OpenNextConfig } from "types/open-next";
 import { DetachedPromiseRunner } from "utils/promise";
+import type { OpenNextConfig, OverrideOptions } from "types/open-next";
 
 import { debug } from "../adapters/logger";
 import { generateUniqueId } from "../adapters/util";
@@ -21,11 +21,37 @@ declare global {
   var incrementalCache: IncrementalCache;
   var fnName: string | undefined;
   var serverId: string;
-  var __als: AsyncLocalStorage<{
-    requestId: string;
-    pendingPromiseRunner: DetachedPromiseRunner;
-    isISRRevalidation?: boolean;
-  }>;
+  // var __als: AsyncLocalStorage<{
+  //   requestId: string;
+  //   pendingPromiseRunner: DetachedPromiseRunner;
+  //   isISRRevalidation?: boolean;
+  // }>;
+}
+
+async function resolveQueue(queue: OverrideOptions["queue"]) {
+  if (typeof queue === "string") {
+    const m = await import(`../queue/${queue}.js`);
+    return m.default;
+  } else if (typeof queue === "function") {
+    return queue();
+  } else {
+    const m_1 = await import("../queue/sqs.js");
+    return m_1.default;
+  }
+}
+
+async function resolveIncrementalCache(
+  incrementalCache: OverrideOptions["incrementalCache"],
+) {
+  if (typeof incrementalCache === "string") {
+    const m = await import(`../cache/incremental/${incrementalCache}.js`);
+    return m.default;
+  } else if (typeof incrementalCache === "function") {
+    return incrementalCache();
+  } else {
+    const m_1 = await import("../cache/incremental/s3.js");
+    return m_1.default;
+  }
 }
 
 export async function createMainHandler() {
