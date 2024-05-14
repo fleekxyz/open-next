@@ -18,16 +18,13 @@ const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
 export type BuildOptions = ReturnType<typeof normalizeOptions>;
 
 export function normalizeOptions(config: OpenNextConfig, root: string) {
-  const appPath = path.join(process.cwd(), config.appPath || ".");
-  const buildOutputPath = path.join(
-    process.cwd(),
-    config.buildOutputPath || ".",
-  );
+  const appPath = path.join(root, config.appPath || ".");
+  const buildOutputPath = path.join(root, config.buildOutputPath || ".");
   const outputDir = path.join(buildOutputPath, ".open-next");
 
   let nextPackageJsonPath: string;
   if (config.packageJsonPath) {
-    const _pkgPath = path.join(process.cwd(), config.packageJsonPath);
+    const _pkgPath = path.join(root, config.packageJsonPath);
     nextPackageJsonPath = _pkgPath.endsWith("package.json")
       ? _pkgPath
       : path.join(_pkgPath, "./package.json");

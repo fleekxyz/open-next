@@ -42,12 +42,12 @@ export function validateConfig(config: OpenNextConfig) {
     validateSplittedFunctionOptions(fnOptions, name);
   });
   if (config.dangerous?.disableIncrementalCache) {
-    logger.warn(
+    logger.info(
       "You've disabled incremental cache. This means that ISR and SSG will not work.",
     );
   }
   if (config.dangerous?.disableTagCache) {
-    logger.warn(
+    logger.info(
       `You've disabled tag cache. 
        This means that revalidatePath and revalidateTag from next/cache will not work.
        It is safe to disable if you only use page router`,

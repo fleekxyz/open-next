@@ -25,7 +25,7 @@ import {
   traverseFiles,
 } from "./build/helper.js";
 import { validateConfig } from "./build/validateConfig.js";
-import logger from "./logger.js";
+import logger, { LEVEL } from "./logger.js";
 import { openNextReplacementPlugin } from "./plugins/replacement.js";
 import { openNextResolvePlugin } from "./plugins/resolve.js";
 import { OpenNextConfig } from "./types/open-next.js";
@@ -43,36 +43,50 @@ export type BuildArgs = {
   openNextConfigPath?: string;
   skipBuild?: boolean;
   standaloneMode?: boolean;
+  logLevel?: LEVEL;
 };
 
-export async function build({ openNextConfigPath, skipBuild, standaloneMode }: BuildArgs) {
+export async function build({
+  openNextConfigPath,
+  skipBuild,
+  standaloneMode,
+  logLevel,
+}: BuildArgs) {
   showWindowsWarning();
 
   // Load open-next.config.ts
-  const tempDir = initTempDir();
-  const configPath = compileOpenNextConfig(tempDir, openNextConfigPath);
+  const rootDir = openNextConfigPath
+    ? path.dirname(openNextConfigPath)
+    : process.cwd();
+
+  const tempDir = initTempDir(rootDir);
+  const configPath = compileOpenNextConfig(
+    rootDir,
+    tempDir,
+    openNextConfigPath,
+  );
   config = (await import(configPath)).default as OpenNextConfig;
   validateConfig(config);
 
   const { root: monorepoRoot, packager } = findMonorepoRoot(
-    path.join(process.cwd(), config.appPath || "."),
+    path.join(rootDir, config.appPath || "."),
   );
 
   // Initialize options
   options = normalizeOptions(config, monorepoRoot);
-  logger.setLevel(options.debug ? "debug" : "info");
+  logger.setLevel(logLevel ?? "error");
 
   // Pre-build validation
   checkRunningInsideNextjsApp();
-  printNextjsVersion();
+  // printNextjsVersion();
   printOpenNextVersion();
 
   // Build Next.js app
-  printHeader("Building Next.js app");
   if (standaloneMode) {
     setStandaloneBuildMode(monorepoRoot);
   }
   if (!skipBuild) {
+    printHeader("Building Next.js app");
     await buildNextjsApp(packager);
   }
 
@@ -109,19 +123,22 @@ function showWindowsWarning() {
   );
 }
 
-function initTempDir() {
-  const dir = path.join(process.cwd(), ".open-next");
+function initTempDir(rootDir: string) {
+  const dir = path.join(rootDir, ".open-next");
   const tempDir = path.join(dir, ".build");
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(tempDir, { recursive: true });
   return tempDir;
 }
 
-function compileOpenNextConfig(tempDir: string, openNextConfigPath?: string) {
-  const sourcePath = path.join(
-    process.cwd(),
-    openNextConfigPath ?? "open-next.config.ts",
-  );
+function compileOpenNextConfig(
+  rootDir: string,
+  tempDir: string,
+  openNextConfigPath?: string,
+) {
+  const sourcePath = openNextConfigPath
+    ? openNextConfigPath
+    : path.join(rootDir, "open-next.config.ts");
   const outputPath = path.join(tempDir, "open-next.config.mjs");
 
   //Check if open-next.config.ts exists
@@ -724,7 +741,7 @@ function compileCache() {
 }
 
 async function createMiddleware() {
-  console.info(`Bundling middleware function...`);
+  logger.info(`Bundling middleware function...`);
 
   const { appBuildOutputPath, outputDir } = options;
 
