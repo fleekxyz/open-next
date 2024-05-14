@@ -7,14 +7,14 @@ import { OpenNextConfig } from "types/open-next.js";
 import logger from "../logger.js";
 
 export function compileOpenNextConfigNode(
+  rootDir: string,
   tempDir: string,
   openNextConfigPath?: string,
   nodeExternals?: string,
 ) {
-  const sourcePath = path.join(
-    process.cwd(),
-    openNextConfigPath ?? "open-next.config.ts",
-  );
+  const sourcePath = openNextConfigPath
+    ? openNextConfigPath
+    : path.join(rootDir, "open-next.config.ts");
   const outputPath = path.join(tempDir, "open-next.config.mjs");
 
   //Check if open-next.config.ts exists
@@ -53,14 +53,14 @@ export function compileOpenNextConfigNode(
 }
 
 export function compileOpenNextConfigEdge(
+  rootDir: string,
   tempDir: string,
   config: OpenNextConfig,
   openNextConfigPath?: string,
 ) {
-  const sourcePath = path.join(
-    process.cwd(),
-    openNextConfigPath ?? "open-next.config.ts",
-  );
+  const sourcePath = openNextConfigPath
+    ? openNextConfigPath
+    : path.join(rootDir, "open-next.config.ts");
   const outputPath = path.join(tempDir, "open-next.config.edge.mjs");
 
   // We need to check if the config uses the edge runtime at any point

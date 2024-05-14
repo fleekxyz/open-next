@@ -28,7 +28,7 @@ import {
   traverseFiles,
 } from "./build/helper.js";
 import { validateConfig } from "./build/validateConfig.js";
-import logger from "./logger.js";
+import logger, { LEVEL } from "./logger.js";
 import { openNextReplacementPlugin } from "./plugins/replacement.js";
 import { openNextResolvePlugin } from "./plugins/resolve.js";
 import { OpenNextConfig } from "./types/open-next.js";
@@ -47,6 +47,7 @@ export type BuildArgs = {
   nodeExternals?: string;
   skipBuild?: boolean;
   standaloneMode?: boolean;
+  logLevel?: LEVEL;
 };
 
 export async function build({
@@ -54,16 +55,23 @@ export async function build({
   nodeExternals,
   skipBuild,
   standaloneMode,
+  logLevel,
 }: BuildArgs) {
   showWindowsWarning();
 
   // Load open-next.config.ts
-  const tempDir = initTempDir();
-  let configPath = compileOpenNextConfigNode(
+  const rootDir = openNextConfigPath
+    ? path.dirname(openNextConfigPath)
+    : process.cwd();
+
+  const tempDir = initTempDir(rootDir);
+  const configPath = compileOpenNextConfigNode(
+    rootDir,
     tempDir,
     openNextConfigPath,
     nodeExternals,
   );
+
   // On Windows, we need to use file:// protocol to load the config file using import()
   if (process.platform === "win32") configPath = `file://${configPath}`;
   config = (await import(configPath)).default as OpenNextConfig;
@@ -78,26 +86,25 @@ export async function build({
   compileOpenNextConfigEdge(tempDir, config, openNextConfigPath);
 
   const { root: monorepoRoot, packager } = findMonorepoRoot(
-    path.join(process.cwd(), config.appPath || "."),
+    path.join(rootDir, config.appPath || "."),
   );
 
   // Initialize options
   options = normalizeOptions(config, monorepoRoot);
-  logger.setLevel(options.debug ? "debug" : "info");
+  logger.setLevel(logLevel ?? "error");
 
   // Pre-build validation
   checkRunningInsideNextjsApp();
-  printNextjsVersion();
+  // printNextjsVersion();
   printOpenNextVersion();
 
   // Build Next.js app
-  printHeader("Building Next.js app");
-
   if (standaloneMode) {
     setStandaloneBuildMode(monorepoRoot);
   }
 
   if (!skipBuild) {
+    printHeader("Building Next.js app");
     await buildNextjsApp(packager);
   }
 
@@ -134,8 +141,8 @@ function showWindowsWarning() {
   );
 }
 
-function initTempDir() {
-  const dir = path.join(process.cwd(), ".open-next");
+function initTempDir(rootDir: string) {
+  const dir = path.join(rootDir, ".open-next");
   const tempDir = path.join(dir, ".build");
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(tempDir, { recursive: true });
@@ -724,7 +731,7 @@ export function compileCache(format: "cjs" | "esm" = "cjs") {
 }
 
 async function createMiddleware() {
-  console.info(`Bundling middleware function...`);
+  logger.info(`Bundling middleware function...`);
 
   const { appBuildOutputPath, outputDir } = options;
 

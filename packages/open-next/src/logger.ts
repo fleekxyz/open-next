@@ -1,8 +1,8 @@
 import chalk from "chalk";
 
-type LEVEL = "info" | "debug";
+export type LEVEL = "info" | "debug" | "warn" | "error";
 
-let logLevel: LEVEL = "info";
+let logLevel: LEVEL = "error";
 
 export default {
   setLevel: (level: LEVEL) => (logLevel = level),
@@ -10,7 +10,15 @@ export default {
     if (logLevel !== "debug") return;
     console.log(chalk.magenta("DEBUG"), ...args);
   },
-  info: console.log,
-  warn: (...args: any[]) => console.warn(chalk.yellow("WARN"), ...args),
-  error: (...args: any[]) => console.error(chalk.red("ERROR"), ...args),
+  info: (...args: any[]) => {
+    if (logLevel === "warn" || logLevel === "error") return;
+    return console.log(...args);
+  },
+  warn: (...args: any[]) => {
+    if (logLevel === "error") return;
+    return console.warn(chalk.yellow("WARN"), ...args);
+  },
+  error: (...args: any[]) => {
+    return console.error(chalk.red("ERROR"), ...args);
+  },
 };
