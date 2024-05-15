@@ -7,7 +7,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
-    "@fleekxyz/open-next": "workspace:*",
+    "@fleek-platform/open-next": "workspace:*",
     "@open-next/utils": "workspace:*"
   },
   "devDependencies": {

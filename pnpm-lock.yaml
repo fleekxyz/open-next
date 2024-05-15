@@ -99,7 +99,7 @@ importers:
       '@example/shared':
         specifier: workspace:*
         version: link:../shared
-      '@fleekxyz/open-next':
+      '@fleek-platform/open-next':
         specifier: workspace:*
         version: link:../../packages/open-next
       '@open-next/utils':
@@ -142,7 +142,7 @@ importers:
       '@example/shared':
         specifier: workspace:*
         version: link:../shared
-      '@fleekxyz/open-next':
+      '@fleek-platform/open-next':
         specifier: workspace:*
         version: link:../../packages/open-next
       '@open-next/utils':
@@ -313,7 +313,7 @@ importers:
 
   packages/tests-unit:
     dependencies:
-      '@fleekxyz/open-next':
+      '@fleek-platform/open-next':
         specifier: workspace:*
         version: link:../open-next
       '@open-next/utils':
