@@ -2,7 +2,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "name": "@fleekxyz/open-next",
+  "name": "@fleek-platform/open-next",
   "version": "3.1.2",
   "bin": {
     "open-next": "./dist/index.js"
