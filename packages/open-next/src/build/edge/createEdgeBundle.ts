@@ -167,6 +167,7 @@ export async function buildEdgeBundle({
         "process.env.SUSPENSE_CACHE_URL": '"http://foo.com"',
         "process.env.SUSPENSE_CACHE_BASEPATH": '"/cache"',
         "process.env.SUSPENSE_CACHE_AUTH_TOKEN": '"foo"',
+        "process.env.SUSPENSE_CACHE_PROTO": '"false"',
         "process.env.__NEXT_TEST_MAX_ISR_CACHE": "10",
         "process.env.__NEXT_INCREMENTAL_CACHE_IPC_PORT": "8080",
         "process.env.__NEXT_INCREMENTAL_CACHE_IPC_KEY": '"foo"',
