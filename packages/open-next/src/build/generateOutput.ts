@@ -4,11 +4,9 @@ import path from "node:path";
 import { NextConfig } from "types/next-types.js";
 import {
   BaseOverride,
-  DefaultOverrideOptions,
   FunctionOptions,
   LazyLoadedOverride,
   OpenNextConfig,
-  OverrideOptions,
 } from "types/open-next";
 
 import { getBuildId } from "./helper.js";
@@ -21,26 +19,16 @@ type BaseFunction = {
 type OpenNextFunctionOrigin = {
   type: "function";
   streaming?: boolean;
-  wrapper: string;
-  converter: string;
 } & BaseFunction;
 
 type OpenNextECSOrigin = {
   type: "ecs";
   bundle: string;
-  wrapper: string;
-  converter: string;
   dockerfile: string;
 };
 
-type CommonOverride = {
-  queue: string;
-  incrementalCache: string;
-  tagCache: string;
-};
-
-type OpenNextServerFunctionOrigin = OpenNextFunctionOrigin & CommonOverride;
-type OpenNextServerECSOrigin = OpenNextECSOrigin & CommonOverride;
+type OpenNextServerFunctionOrigin = OpenNextFunctionOrigin;
+type OpenNextServerECSOrigin = OpenNextECSOrigin;
 
 type OpenNextS3Origin = {
   type: "s3";
@@ -93,16 +81,7 @@ interface OpenNextOutput {
 }
 
 async function canStream(opts: FunctionOptions) {
-  if (!opts.override?.wrapper) {
-    return false;
-  } else {
-    if (typeof opts.override.wrapper === "string") {
-      return opts.override.wrapper === "aws-lambda-streaming";
-    } else {
-      const wrapper = await opts.override.wrapper();
-      return wrapper.supportStreaming;
-    }
-  }
+  return false;
 }
 
 async function extractOverrideName(
@@ -118,38 +97,6 @@ async function extractOverrideName(
     const overrideModule = await override();
     return overrideModule.name;
   }
-}
-
-async function extractOverrideFn(override?: DefaultOverrideOptions) {
-  if (!override) {
-    return {
-      wrapper: "aws-lambda",
-      converter: "aws-apigw-v2",
-    };
-  }
-  const wrapper = await extractOverrideName("aws-lambda", override.wrapper);
-  const converter = await extractOverrideName(
-    "aws-apigw-v2",
-    override.converter,
-  );
-  return { wrapper, converter };
-}
-
-async function extractCommonOverride(override?: OverrideOptions) {
-  if (!override) {
-    return {
-      queue: "sqs",
-      incrementalCache: "s3",
-      tagCache: "dynamodb",
-    };
-  }
-  const queue = await extractOverrideName("sqs", override.queue);
-  const incrementalCache = await extractOverrideName(
-    "s3",
-    override.incrementalCache,
-  );
-  const tagCache = await extractOverrideName("dynamodb", override.tagCache);
-  return { queue, incrementalCache, tagCache };
 }
 
 function prefixPattern(basePath: string) {
@@ -175,7 +122,6 @@ export async function generateOutput(
         "pattern-env",
         config.middleware!.originResolver,
       ),
-      ...(await extractOverrideFn(config.middleware?.override)),
     };
   }
   // Add edge functions
@@ -183,8 +129,7 @@ export async function generateOutput(
     if (value.placement === "global") {
       edgeFunctions[key] = {
         bundle: `.open-next/server-functions/${key}`,
-        handler: "index.handler",
-        ...(await extractOverrideFn(value.override)),
+        handler: "index.main",
       };
     }
   });
@@ -228,34 +173,28 @@ export async function generateOutput(
     },
     imageOptimizer: {
       type: "function",
-      handler: "index.handler",
+      handler: "index.main",
       bundle: ".open-next/image-optimization-function",
       streaming: false,
       imageLoader: await extractOverrideName(
         "s3",
         config.imageOptimization?.loader,
       ),
-      ...(await extractOverrideFn(config.imageOptimization?.override)),
     },
     default: config.default.override?.generateDockerfile
       ? {
           type: "ecs",
           bundle: ".open-next/server-functions/default",
           dockerfile: ".open-next/server-functions/default/Dockerfile",
-          ...(await extractOverrideFn(config.default.override)),
-          ...(await extractCommonOverride(config.default.override)),
         }
       : {
           type: "function",
-          handler: "index.handler",
+          handler: "index.main",
           bundle: ".open-next/server-functions/default",
           streaming: defaultOriginCanstream,
-          ...(await extractOverrideFn(config.default.override)),
-          ...(await extractCommonOverride(config.default.override)),
         },
   };
 
-  //@ts-expect-error - Not sure how to fix typing here, it complains about the type of imageOptimizer and s3
   const origins: OpenNextOutput["origins"] = defaultOrigins;
 
   // Then add function origins
@@ -267,18 +206,14 @@ export async function generateOutput(
             type: "ecs",
             bundle: `.open-next/server-functions/${key}`,
             dockerfile: `.open-next/server-functions/${key}/Dockerfile`,
-            ...(await extractOverrideFn(value.override)),
-            ...(await extractCommonOverride(value.override)),
           };
         } else {
           const streaming = await canStream(value);
           origins[key] = {
             type: "function",
-            handler: "index.handler",
+            handler: "index.main",
             bundle: `.open-next/server-functions/${key}`,
             streaming,
-            ...(await extractOverrideFn(value.override)),
-            ...(await extractCommonOverride(value.override)),
           };
         }
       }
@@ -348,19 +283,19 @@ export async function generateOutput(
       disableIncrementalCache: config.dangerous?.disableIncrementalCache,
       disableTagCache: config.dangerous?.disableTagCache,
       warmer: {
-        handler: "index.handler",
+        handler: "index.main",
         bundle: ".open-next/warmer-function",
       },
       initializationFunction: isTagCacheDisabled
         ? undefined
         : {
-            handler: "index.handler",
+            handler: "index.main",
             bundle: ".open-next/dynamodb-provider",
           },
       revalidationFunction: config.dangerous?.disableIncrementalCache
         ? undefined
         : {
-            handler: "index.handler",
+            handler: "index.main",
             bundle: ".open-next/revalidation-function",
           },
     },

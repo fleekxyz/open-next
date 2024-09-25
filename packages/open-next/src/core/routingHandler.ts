@@ -1,9 +1,8 @@
 import {
-  BuildId,
-  ConfigHeaders,
+  Header,
+  InternalRoutesManifest,
   PrerenderManifest,
-  RoutesManifest,
-} from "config/index";
+} from "types/next-types";
 import { InternalEvent, InternalResult, Origin } from "types/open-next";
 
 import { debug } from "../adapters/logger";
@@ -17,6 +16,13 @@ import {
 } from "./routing/matcher";
 import { handleMiddleware } from "./routing/middleware";
 
+declare global {
+  var BuildId: string;
+  var RoutesManifest: InternalRoutesManifest;
+  var ConfigHeaders: Header[];
+  var PrerenderManifest: PrerenderManifest;
+}
+
 export interface MiddlewareOutputEvent {
   internalEvent: InternalEvent;
   isExternalRewrite: boolean;
@@ -25,8 +31,10 @@ export interface MiddlewareOutputEvent {
 }
 
 // Add the locale prefix to the regex so we correctly match the rawPath
-const optionalLocalePrefixRegex = !!RoutesManifest.locales.length
-  ? `^/(?:${RoutesManifest.locales.map((locale) => `${locale}/?`).join("|")})?`
+const optionalLocalePrefixRegex = !!globalThis.RoutesManifest.locales.length
+  ? `^/(?:${globalThis.RoutesManifest.locales
+      .map((locale) => `${locale}/?`)
+      .join("|")})?`
   : "^/";
 
 // Add the basepath prefix to the regex so we correctly match the rawPath
@@ -34,7 +42,7 @@ const optionalBasepathPrefixRegex = !!RoutesManifest.basePath
   ? `^${RoutesManifest.basePath}/?`
   : "^/";
 
-const staticRegexp = RoutesManifest.routes.static.map(
+const staticRegexp = globalThis.RoutesManifest.routes.static.map(
   (route) =>
     new RegExp(
       route.regex
@@ -52,7 +60,7 @@ const dynamicRegexp = RoutesManifest.routes.dynamic.map(
     ),
 );
 
-function applyMiddlewareHeaders(
+export function applyMiddlewareHeaders(
   eventHeaders: Record<string, string | string[]>,
   middlewareHeaders: Record<string, string | string[] | undefined>,
   setPrefix = true,
@@ -68,7 +76,8 @@ function applyMiddlewareHeaders(
 export default async function routingHandler(
   event: InternalEvent,
 ): Promise<InternalResult | MiddlewareOutputEvent> {
-  const nextHeaders = addNextConfigHeaders(event, ConfigHeaders) ?? {};
+  const nextHeaders =
+    addNextConfigHeaders(event, globalThis.ConfigHeaders) ?? {};
 
   let internalEvent = fixDataPage(event, BuildId);
   if ("statusCode" in internalEvent) {
@@ -122,7 +131,7 @@ export default async function routingHandler(
   // We want to run this just before the dynamic route check
   const { event: fallbackEvent, isISR } = handleFallbackFalse(
     internalEvent,
-    PrerenderManifest,
+    globalThis.PrerenderManifest,
   );
   internalEvent = fallbackEvent;
 

@@ -128,56 +128,56 @@ export default class S3Cache {
       : this.getIncrementalCache(key);
   }
 
-  async getFetchCache(key: string, softTags?: string[], tags?: string[]) {
-    debug("get fetch cache", { key, softTags, tags });
-    try {
-      const { value, lastModified } = await globalThis.incrementalCache.get(
-        key,
-        true,
-      );
-      // const { Body, LastModified } = await this.getS3Object(key, "fetch");
-      const _lastModified = await globalThis.tagCache.getLastModified(
-        key,
-        lastModified,
-      );
-      if (_lastModified === -1) {
-        // If some tags are stale we need to force revalidation
-        return null;
-      }
+  async getFetchCache(_key: string, _softTags?: string[], _tags?: string[]) {
+    return null;
+    // try {
+    //   const { value, lastModified } = await globalThis.incrementalCache.get(
+    //     key,
+    //     true,
+    //   );
+    //   // const { Body, LastModified } = await this.getS3Object(key, "fetch");
+    //   const _lastModified = await globalThis.tagCache.getLastModified(
+    //     key,
+    //     lastModified,
+    //   );
+    //   if (_lastModified === -1) {
+    //     // If some tags are stale we need to force revalidation
+    //     return null;
+    //   }
 
-      if (value === undefined) return null;
+    //   if (value === undefined) return null;
 
-      // For cases where we don't have tags, we need to ensure that the soft tags are not being revalidated
-      // We only need to check for the path as it should already contain all the tags
-      if ((tags ?? []).length === 0) {
-        // Then we need to find the path for the given key
-        const path = softTags?.find(
-          (tag) =>
-            tag.startsWith("_N_T_/") &&
-            !tag.endsWith("layout") &&
-            !tag.endsWith("page"),
-        );
-        if (path) {
-          const pathLastModified = await globalThis.tagCache.getLastModified(
-            path.replace("_N_T_/", ""),
-            lastModified,
-          );
-          if (pathLastModified === -1) {
-            // In case the path has been revalidated, we don't want to use the fetch cache
-            return null;
-          }
-        }
-      }
+    //   // For cases where we don't have tags, we need to ensure that the soft tags are not being revalidated
+    //   // We only need to check for the path as it should already contain all the tags
+    //   if ((tags ?? []).length === 0) {
+    //     // Then we need to find the path for the given key
+    //     const path = softTags?.find(
+    //       (tag) =>
+    //         tag.startsWith("_N_T_/") &&
+    //         !tag.endsWith("layout") &&
+    //         !tag.endsWith("page"),
+    //     );
+    //     if (path) {
+    //       const pathLastModified = await globalThis.tagCache.getLastModified(
+    //         path.replace("_N_T_/", ""),
+    //         lastModified,
+    //       );
+    //       if (pathLastModified === -1) {
+    //         // In case the path has been revalidated, we don't want to use the fetch cache
+    //         return null;
+    //       }
+    //     }
+    //   }
 
-      return {
-        lastModified: _lastModified,
-        value: value,
-      } as CacheHandlerValue;
-    } catch (e) {
-      // We can usually ignore errors here as they are usually due to cache not being found
-      debug("Failed to get fetch cache", e);
-      return null;
-    }
+    //   return {
+    //     lastModified: _lastModified,
+    //     value: value,
+    //   } as CacheHandlerValue;
+    // } catch (e) {
+    //   // We can usually ignore errors here as they are usually due to cache not being found
+    //   debug("Failed to get fetch cache", e);
+    //   return null;
+    // }
   }
 
   async getIncrementalCache(key: string): Promise<CacheHandlerValue | null> {
@@ -197,7 +197,7 @@ export default class S3Cache {
         // If some tags are stale we need to force revalidation
         return null;
       }
-      // const requestId = globalThis.__als.getStore()?.requestId ?? "";
+
       const requestId = "";
       globalThis.lastModified[requestId] = _lastModified;
       if (cacheData?.type === "route") {
@@ -206,7 +206,9 @@ export default class S3Cache {
           value: {
             kind: "ROUTE",
             body: Buffer.from(
-              cacheData.body ?? Buffer.alloc(0),
+              typeof cacheData.body === 'string' 
+                ? cacheData.body 
+                : cacheData.body ?? Buffer.alloc(0),
               isBinaryContentType(String(meta?.headers?.["content-type"]))
                 ? "base64"
                 : "utf8",
@@ -254,11 +256,7 @@ export default class S3Cache {
     if (globalThis.disableIncrementalCache) {
       return;
     }
-    // This one might not even be necessary anymore
-    // Better be safe than sorry
-    const detachedPromise = globalThis.__als
-      .getStore()
-      ?.pendingPromiseRunner.withResolvers<void>();
+
     try {
       if (data?.kind === "ROUTE") {
         const { body, status, headers } = data;
@@ -345,9 +343,6 @@ export default class S3Cache {
       debug("Finished setting cache");
     } catch (e) {
       error("Failed to set cache", e);
-    } finally {
-      // We need to resolve the promise even if there was an error
-      detachedPromise?.resolve();
     }
   }
 

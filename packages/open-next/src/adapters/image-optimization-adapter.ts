@@ -21,8 +21,9 @@ import type { NextUrlWithParsedQuery } from "next/dist/server/request-meta";
 import { InternalEvent, InternalResult } from "types/open-next.js";
 import { emptyReadableStream, toReadableStream } from "utils/stream.js";
 
+import { fleekInternalEventConverter } from "../converters/fleek.js";
 import { createGenericHandler } from "../core/createGenericHandler.js";
-import { resolveImageLoader } from "../core/resolve.js";
+import ipfsImageLoader from "../overrides/imageLoader/ipfs";
 import { debug, error } from "./logger.js";
 import { optimizeImage } from "./plugins/image-optimization/image-optimization.js";
 import { setNodeEnv } from "./util.js";
@@ -47,8 +48,9 @@ debug("Init config", {
 // Handler //
 /////////////
 
-export const handler = await createGenericHandler({
+export const main = await createGenericHandler({
   handler: defaultHandler,
+  converter: fleekInternalEventConverter,
   type: "imageOptimization",
 });
 
@@ -208,9 +210,7 @@ function buildFailureResponse(
   };
 }
 
-const loader = await resolveImageLoader(
-  globalThis.openNextConfig.imageOptimization?.loader ?? "s3",
-);
+const loader = ipfsImageLoader;
 
 async function downloadHandler(
   _req: IncomingMessage,

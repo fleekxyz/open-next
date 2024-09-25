@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { NextConfig, PrerenderManifest } from "config/index";
+import { NextConfig, PrerenderManifest } from "types/next-types";
 import { InternalEvent, InternalResult } from "types/open-next";
 import { emptyReadableStream, toReadableStream } from "utils/stream";
 
@@ -12,6 +12,11 @@ import { generateMessageGroupId } from "./util";
 const CACHE_ONE_YEAR = 60 * 60 * 24 * 365;
 const CACHE_ONE_MONTH = 60 * 60 * 24 * 30;
 
+declare global {
+  var PrerenderManifest: PrerenderManifest;
+  var NextConfig: NextConfig;
+}
+
 async function computeCacheControl(
   path: string,
   body: string,
@@ -21,9 +26,9 @@ async function computeCacheControl(
 ) {
   let finalRevalidate = CACHE_ONE_YEAR;
 
-  const existingRoute = Object.entries(PrerenderManifest.routes).find(
-    (p) => p[0] === path,
-  )?.[1];
+  const existingRoute = Object.entries(
+    globalThis.PrerenderManifest.routes,
+  ).find((p) => p[0] === path)?.[1];
   if (revalidate === undefined && existingRoute) {
     finalRevalidate =
       existingRoute.initialRevalidateSeconds === false
@@ -55,10 +60,10 @@ async function computeCacheControl(
     });
     const isStale = sMaxAge === 1;
     if (isStale) {
-      let url = NextConfig.trailingSlash ? `${path}/` : path;
-      if (NextConfig.basePath) {
+      let url = globalThis.NextConfig.trailingSlash ? `${path}/` : path;
+      if (globalThis.NextConfig.basePath) {
         // We need to add the basePath to the url
-        url = `${NextConfig.basePath}${url}`;
+        url = `${globalThis.NextConfig.basePath}${url}`;
       }
       await globalThis.queue.send({
         MessageBody: { host, url },
@@ -135,8 +140,8 @@ export async function cacheInterceptor(
   // We localize the path in case i18n is enabled
   let localizedPath = localizePath(event);
   // If using basePath we need to remove it from the path
-  if (NextConfig.basePath) {
-    localizedPath = localizedPath.replace(NextConfig.basePath, "");
+  if (globalThis.NextConfig.basePath) {
+    localizedPath = localizedPath.replace(globalThis.NextConfig.basePath, "");
   }
   // We also need to remove trailing slash
   localizedPath = localizedPath.replace(/\/$/, "");
@@ -148,8 +153,8 @@ export async function cacheInterceptor(
   debug("Checking cache for", localizedPath, PrerenderManifest);
 
   const isISR =
-    Object.keys(PrerenderManifest.routes).includes(localizedPath) ||
-    Object.values(PrerenderManifest.dynamicRoutes).some((dr) =>
+    Object.keys(globalThis.PrerenderManifest.routes).includes(localizedPath) ||
+    Object.values(globalThis.PrerenderManifest.dynamicRoutes).some((dr) =>
       new RegExp(dr.routeRegex).test(localizedPath),
     );
   debug("isISR", isISR);

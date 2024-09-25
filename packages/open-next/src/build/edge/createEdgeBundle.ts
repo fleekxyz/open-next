@@ -1,21 +1,29 @@
 import { mkdirSync } from "node:fs";
 import url, { fileURLToPath } from "node:url";
 
-import { nodeModulesPolyfillPlugin } from "esbuild-plugins-node-modules-polyfill";
 import fs from "fs";
 import path from "path";
 import { MiddlewareInfo, MiddlewareManifest } from "types/next-types";
 import {
   IncludedConverter,
-  OverrideOptions,
   RouteTemplate,
   SplittedFunctionOptions,
 } from "types/open-next";
 
+import {
+  loadAppPathsManifestKeys,
+  loadBuildId,
+  loadConfig,
+  loadConfigHeaders,
+  loadHtmlPages,
+  loadMiddlewareManifest,
+  loadPrerenderManifest,
+  // loadPublicAssets,
+  loadRoutesManifest,
+} from "../../adapters/config/util.js";
 import logger from "../../logger.js";
 import { openNextEdgePlugins } from "../../plugins/edge.js";
 import { openNextReplacementPlugin } from "../../plugins/replacement.js";
-import { openNextResolvePlugin } from "../../plugins/resolve.js";
 import { BuildOptions, esbuildAsync } from "../helper.js";
 
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
@@ -25,8 +33,8 @@ interface BuildEdgeBundleOptions {
   middlewareInfo: MiddlewareInfo;
   entrypoint: string;
   outfile: string;
+  outputDir: string;
   options: BuildOptions;
-  overrides?: OverrideOptions;
   defaultConverter?: IncludedConverter;
   additionalInject?: string;
   includeCache?: boolean;
@@ -38,22 +46,52 @@ export async function buildEdgeBundle({
   middlewareInfo,
   entrypoint,
   outfile,
+  outputDir,
   options,
-  defaultConverter,
-  overrides,
   additionalInject,
   includeCache,
   openNextConfigPath,
 }: BuildEdgeBundleOptions) {
+  const middlewarePath = path.join(outputDir, ".build", "middleware.mjs");
+
+  const nextDir = path.join(appBuildOutputPath, ".next");
+  const NextConfig = loadConfig(nextDir);
+  const BuildId = loadBuildId(nextDir);
+  const HtmlPages = loadHtmlPages(nextDir);
+  const RoutesManifest = loadRoutesManifest(nextDir);
+  const ConfigHeaders = loadConfigHeaders(nextDir);
+  const PrerenderManifest = loadPrerenderManifest(nextDir);
+  const AppPathsManifestKeys = loadAppPathsManifestKeys(nextDir);
+  const MiddlewareManifest = loadMiddlewareManifest(nextDir);
+
+  console.log("appBuildOutputPath", appBuildOutputPath);
+  console.log("entrypoint", entrypoint);
+  console.log("outfile", outfile);
+  console.log("middlewarePath", middlewarePath);
+  console.log("middlewareInfo", middlewareInfo);
+  console.log("\n");
+
   await esbuildAsync(
     {
-      entryPoints: [entrypoint],
+      entryPoints: [
+        entrypoint,
+        // ...middlewareInfo.files
+      ],
       // inject: ,
       bundle: true,
       outfile,
-      external: ["node:*", "next", "@aws-sdk/*"],
+      external: ["node:*"],
+      // format: "esm",
       target: "es2022",
       platform: "neutral",
+      conditions: ["module"],
+      mainFields: ["browser", "module", "main"],
+      treeShaking: true,
+      alias: {
+        path: "node:path",
+        crypto: "node:crypto",
+        "middleware-stub": middlewarePath,
+      },
       plugins: [
         {
           name: "replace-async-local-storage",
@@ -86,34 +124,6 @@ export async function buildEdgeBundle({
             );
           },
         },
-        openNextResolvePlugin({
-          overrides: {
-            wrapper:
-              typeof overrides?.wrapper === "string"
-                ? overrides.wrapper
-                : "aws-lambda",
-            converter:
-              typeof overrides?.converter === "string"
-                ? overrides.converter
-                : defaultConverter,
-            ...(includeCache
-              ? {
-                  tagCache:
-                    typeof overrides?.tagCache === "string"
-                      ? overrides.tagCache
-                      : "dynamodb-lite",
-                  incrementalCache:
-                    typeof overrides?.incrementalCache === "string"
-                      ? overrides.incrementalCache
-                      : "s3-lite",
-                  queue:
-                    typeof overrides?.queue === "string"
-                      ? overrides.queue
-                      : "sqs-lite",
-                }
-              : {}),
-          },
-        }),
         openNextReplacementPlugin({
           name: "externalMiddlewareOverrides",
           target: /adapters(\/|\\)middleware\.js/g,
@@ -127,24 +137,6 @@ export async function buildEdgeBundle({
             "../../core",
             "edgeFunctionHandler.js",
           ),
-          useFilesystem:
-            overrides?.wrapper === "cloudflare" ||
-            typeof overrides?.wrapper === "function",
-        }),
-        nodeModulesPolyfillPlugin({
-          globals: {
-            Buffer: true,
-          },
-          // fallback: "empty",
-          modules: {
-            async_hooks: false,
-            buffer: true,
-            path: true,
-            stream: true,
-            zlib: true,
-            crypto: true,
-            https: true,
-          },
         }),
         {
           name: "replace-open-next-config",
@@ -159,7 +151,7 @@ export async function buildEdgeBundle({
             build.onLoad(
               { filter: /.*/, namespace: "replace-onc" },
               async (args) => {
-                const contents = await fs.readFileSync(args.path, "utf-8");
+                const contents = fs.readFileSync(args.path, "utf-8");
                 return {
                   contents,
                   loader: "js",
@@ -168,46 +160,47 @@ export async function buildEdgeBundle({
             );
           },
         },
+        // moduleChecker({ unsupportedModulesUsed }),
+        // nodeProtocolImportSpecifier({}),
       ],
-      treeShaking: true,
-      conditions: ["module"],
-      mainFields: ["module", "main"],
       banner: {
         js: `
-  ${
-    overrides?.wrapper === "cloudflare" ||
-    typeof overrides?.wrapper === "function"
-      ? ""
-      : `
-  const require = (await import("node:module")).createRequire(import.meta.url);
-  const __filename = (await import("node:url")).fileURLToPath(import.meta.url);
-  const __dirname = (await import("node:path")).dirname(__filename);
-
-  const defaultDefineProperty = Object.defineProperty;
-  Object.defineProperty = function(o, p, a) {
-    if(p=== '__import_unsupported' && Boolean(globalThis.__import_unsupported)) {
-      return;
-    }
-    return defaultDefineProperty(o, p, a);
+globalThis.NextConfig = ${JSON.stringify(NextConfig)};
+globalThis.BuildId = ${JSON.stringify(BuildId)};
+globalThis.HtmlPages = ${JSON.stringify(HtmlPages)};
+globalThis.RoutesManifest = ${JSON.stringify(RoutesManifest)};
+globalThis.ConfigHeaders = ${JSON.stringify(ConfigHeaders)};
+globalThis.PrerenderManifest = ${JSON.stringify(PrerenderManifest)};
+globalThis.AppPathsManifestKeys = ${JSON.stringify(AppPathsManifestKeys)};
+globalThis.MiddlewareManifest = ${JSON.stringify(MiddlewareManifest)};
+  globalThis.process = {
+      env: {
+        PORT: 80,
+        NEXT_OTEL_FETCH_DISABLED: "true"
+      }
   };
-  `
-  }
   ${additionalInject ?? ""}
   `,
       },
       define: {
+        "process.env.VERCEL_ENV": '"production"',
+        "process.env.VERCEL_BRANCH_URL": '"why?"',
+        "process.env.VERCEL_PROJECT_PRODUCTION_URL": '"why?"',
+        "process.env.PORT": '"80"',
         "process.env.NODE_ENV": '"production"',
         "process.env.NEXT_RUNTIME": '"edge"',
         "process.env.NEXT_PRIVATE_TEST_PROXY": '"false"',
         "process.env.MAX_REVALIDATE_CONCURRENCY": "10",
+        "process.env.NEXT_OTEL_FETCH_DISABLED": '"true"',
         "process.env.NEXT_OTEL_VERBOSE": "0",
         "process.env.NEXT_PRIVATE_DEBUG_CACHE": '"false"',
-        "process.env.SUSPENSE_CACHE_URL": '"http://foo.com"',
+        "process.env.SUSPENSE_CACHE_URL": '""',
         "process.env.SUSPENSE_CACHE_BASEPATH": '"/cache"',
         "process.env.SUSPENSE_CACHE_AUTH_TOKEN": '"foo"',
         "process.env.__NEXT_TEST_MAX_ISR_CACHE": "10",
         "process.env.__NEXT_INCREMENTAL_CACHE_IPC_PORT": "8080",
         "process.env.__NEXT_INCREMENTAL_CACHE_IPC_KEY": '"foo"',
+        "process.env.OPEN_NEXT_FORCE_NON_EMPTY_RESPONSE": '"true"',
       },
     },
     options,
@@ -235,7 +228,6 @@ export async function generateEdgeBundle(
     ".build",
     "open-next.config.mjs",
   );
-
   // Load middleware manifest
   const middlewareManifest = JSON.parse(
     fs.readFileSync(
@@ -289,8 +281,8 @@ export async function generateEdgeBundle(
     middlewareInfo: fn,
     entrypoint: path.join(__dirname, "../../adapters", "edge-adapter.js"),
     outfile: path.join(outputPath, "index.mjs"),
+    outputDir,
     options,
-    overrides: fnOptions.override,
     openNextConfigPath,
   });
 }

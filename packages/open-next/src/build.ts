@@ -30,7 +30,6 @@ import {
 import { validateConfig } from "./build/validateConfig.js";
 import logger, { LEVEL } from "./logger.js";
 import { openNextReplacementPlugin } from "./plugins/replacement.js";
-import { openNextResolvePlugin } from "./plugins/resolve.js";
 import { OpenNextConfig } from "./types/open-next.js";
 
 const require = topLevelCreateRequire(import.meta.url);
@@ -65,7 +64,7 @@ export async function build({
     : process.cwd();
 
   const tempDir = initTempDir(rootDir);
-  const configPath = compileOpenNextConfigNode(
+  let configPath = compileOpenNextConfigNode(
     rootDir,
     tempDir,
     openNextConfigPath,
@@ -83,7 +82,7 @@ export async function build({
   }
   validateConfig(config);
 
-  compileOpenNextConfigEdge(tempDir, config, openNextConfigPath);
+  compileOpenNextConfigEdge(rootDir, tempDir, config, openNextConfigPath);
 
   const { root: monorepoRoot, packager } = findMonorepoRoot(
     path.join(rootDir, config.appPath || "."),
@@ -103,9 +102,10 @@ export async function build({
     setStandaloneBuildMode(monorepoRoot);
   }
 
+  console.log("skipBuild", skipBuild);
   if (!skipBuild) {
     printHeader("Building Next.js app");
-    await buildNextjsApp(packager);
+    buildNextjsApp(packager);
   }
 
   // Generate deployable bundle
@@ -278,20 +278,9 @@ async function createWarmerBundle(config: OpenNextConfig) {
       entryPoints: [path.join(__dirname, "adapters", "warmer-function.js")],
       external: ["next"],
       outfile: path.join(outputPath, "index.mjs"),
-      plugins: [
-        openNextResolvePlugin({
-          overrides: {
-            converter: config.warmer?.override?.converter ?? "dummy",
-            wrapper: config.warmer?.override?.wrapper,
-          },
-          fnName: "warmer",
-        }),
-      ],
       banner: {
         js: [
-          "import { createRequire as topLevelCreateRequire } from 'module';",
-          "const require = topLevelCreateRequire(import.meta.url);",
-          "import bannerUrl from 'url';",
+          "import bannerUrl from 'node:url';",
           "const __dirname = bannerUrl.fileURLToPath(new URL('.', import.meta.url));",
         ].join(""),
       },
@@ -318,16 +307,7 @@ async function createRevalidationBundle(config: OpenNextConfig) {
       external: ["next", "styled-jsx", "react"],
       entryPoints: [path.join(__dirname, "adapters", "revalidate.js")],
       outfile: path.join(outputPath, "index.mjs"),
-      plugins: [
-        openNextResolvePlugin({
-          fnName: "revalidate",
-          overrides: {
-            converter:
-              config.revalidate?.override?.converter ?? "sqs-revalidate",
-            wrapper: config.revalidate?.override?.wrapper,
-          },
-        }),
-      ],
+      plugins: [],
     },
     options,
   );
@@ -351,16 +331,7 @@ async function createImageOptimizationBundle(config: OpenNextConfig) {
   // Copy open-next.config.mjs into the bundle
   copyOpenNextConfig(options.tempDir, outputPath);
 
-  const plugins = [
-    openNextResolvePlugin({
-      fnName: "imageOptimization",
-      overrides: {
-        converter: config.imageOptimization?.override?.converter,
-        wrapper: config.imageOptimization?.override?.wrapper,
-        imageLoader: config.imageOptimization?.loader,
-      },
-    }),
-  ];
+  const plugins = [];
 
   if (compareSemver(options.nextVersion, "14.1.1") >= 0) {
     plugins.push(
@@ -405,9 +376,7 @@ async function createImageOptimizationBundle(config: OpenNextConfig) {
       outfile: path.join(outputPath, "index.mjs"),
       banner: {
         js: [
-          "import { createRequire as topLevelCreateRequire } from 'module';",
-          "const require = topLevelCreateRequire(import.meta.url);",
-          "import bannerUrl from 'url';",
+          "import bannerUrl from 'node:url';",
           "const __dirname = bannerUrl.fileURLToPath(new URL('.', import.meta.url));",
         ].join("\n"),
       },
@@ -498,8 +467,6 @@ function createStaticAssets() {
 
 async function createCacheAssets(monorepoRoot: string) {
   if (config.dangerous?.disableIncrementalCache) return;
-
-  logger.info(`Bundling cache assets...`);
 
   const { appBuildOutputPath, outputDir } = options;
   const packagePath = path.relative(monorepoRoot, appBuildOutputPath);
@@ -667,20 +634,11 @@ async function createCacheAssets(monorepoRoot: string) {
 
       await esbuildAsync(
         {
-          external: ["@aws-sdk/client-dynamodb"],
+          external: [],
           entryPoints: [path.join(__dirname, "adapters", "dynamo-provider.js")],
           outfile: path.join(providerPath, "index.mjs"),
           target: ["node18"],
-          plugins: [
-            openNextResolvePlugin({
-              fnName: "initializationFunction",
-              overrides: {
-                converter:
-                  config.initializationFunction?.override?.converter ?? "dummy",
-                wrapper: config.initializationFunction?.override?.wrapper,
-              },
-            }),
-          ],
+          plugins: [],
         },
         options,
       );
@@ -776,10 +734,10 @@ async function createMiddleware() {
       entrypoint: path.join(__dirname, "adapters", "middleware.js"),
       outfile: path.join(outputPath, "handler.mjs"),
       ...commonMiddlewareOptions,
-      overrides: config.middleware?.override,
       defaultConverter: "aws-cloudfront",
       includeCache: config.dangerous?.enableCacheInterception,
       openNextConfigPath,
+      outputDir,
     });
   } else {
     await buildEdgeBundle({
@@ -787,6 +745,7 @@ async function createMiddleware() {
       outfile: path.join(outputDir, ".build", "middleware.mjs"),
       ...commonMiddlewareOptions,
       openNextConfigPath,
+      outputDir,
     });
   }
 }

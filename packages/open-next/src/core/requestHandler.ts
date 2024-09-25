@@ -4,7 +4,6 @@ import {
   StreamCreator,
 } from "http/index.js";
 import { InternalEvent, InternalResult } from "types/open-next";
-import { DetachedPromiseRunner } from "utils/promise";
 
 import { debug, error, warn } from "../adapters/logger";
 import { patchAsyncStorage } from "./patchAsyncStorage";
@@ -19,7 +18,7 @@ import { requestHandler, setNextjsPrebundledReact } from "./util";
 //   isISRRevalidation?: boolean;
 // }>();
 
-// patchAsyncStorage();
+patchAsyncStorage();
 
 export async function openNextHandler(
   internalEvent: InternalEvent,
@@ -75,9 +74,18 @@ export async function openNextHandler(
       res.statusCode = preprocessResult.statusCode;
       res.flushHeaders();
       const [bodyToConsume, bodyToReturn] = preprocessResult.body.tee();
-      for await (const chunk of bodyToConsume) {
-        res.write(chunk);
+
+      const reader = bodyToConsume.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } finally {
+        reader.releaseLock();
       }
+
       res.end();
       preprocessResult.body = bodyToReturn;
     }

@@ -6,13 +6,7 @@ const staticGenerationAsyncStorage = {
   run: (store, cb, ...args) =>
     asyncStorage.staticGenerationAsyncStorage.run(store, cb, ...args),
   getStore: () => {
-    const store = asyncStorage.staticGenerationAsyncStorage.getStore();
-    if (store) {
-      store.isOnDemandRevalidate =
-        store.isOnDemandRevalidate &&
-        !globalThis.__als.getStore().isISRRevalidation;
-    }
-    return store;
+    return asyncStorage.staticGenerationAsyncStorage.getStore();
   },
 };
 

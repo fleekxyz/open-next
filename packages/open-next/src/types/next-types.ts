@@ -121,6 +121,22 @@ export interface RoutesManifest {
   };
 }
 
+export interface InternalRoutesManifest {
+  basePath?: string;
+  rewrites: {
+    beforeFiles: RewriteDefinition[];
+    afterFiles: RewriteDefinition[];
+    fallback: RewriteDefinition[];
+  };
+  redirects: RedirectDefinition[];
+  routes: {
+    static: RouteDefinition[];
+    dynamic: RouteDefinition[];
+    data: DataRouteDefinition[];
+  };
+  locales: string[];
+}
+
 export interface MiddlewareInfo {
   files: string[];
   paths?: string[];

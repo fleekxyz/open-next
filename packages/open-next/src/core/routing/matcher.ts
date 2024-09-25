@@ -1,4 +1,3 @@
-import { NextConfig } from "config/index";
 import {
   compile,
   Match,
@@ -13,6 +12,7 @@ import type {
   RewriteDefinition,
   RouteHas,
 } from "types/next-types";
+import { NextConfig } from "types/next-types";
 import { InternalEvent, InternalResult } from "types/open-next";
 import { emptyReadableStream, toReadableStream } from "utils/stream";
 
@@ -26,6 +26,10 @@ import {
   isExternal,
   unescapeRegex,
 } from "./util";
+
+declare global {
+  var NextConfig: NextConfig;
+}
 
 const routeHasMatcher =
   (
@@ -253,14 +257,14 @@ function handleTrailingSlashRedirect(
   if (
     // Someone is trying to redirect to a different origin, let's not do that
     url.host !== "localhost" ||
-    NextConfig.skipTrailingSlashRedirect ||
+    globalThis.NextConfig.skipTrailingSlashRedirect ||
     // We should not apply trailing slash redirect to API routes
     event.rawPath.startsWith("/api/")
   ) {
     return false;
   }
   if (
-    NextConfig.trailingSlash &&
+    globalThis.NextConfig.trailingSlash &&
     !event.headers["x-nextjs-data"] &&
     !event.rawPath.endsWith("/") &&
     !event.rawPath.match(/[\w-]+\.[\w]+$/g)
@@ -279,7 +283,7 @@ function handleTrailingSlashRedirect(
     };
     // eslint-disable-next-line sonarjs/elseif-without-else
   } else if (
-    !NextConfig.trailingSlash &&
+    !globalThis.NextConfig.trailingSlash &&
     event.rawPath.endsWith("/") &&
     event.rawPath !== "/"
   ) {
@@ -367,14 +371,14 @@ export function handleFallbackFalse(
       const routeRegexExp = new RegExp(routeRegex);
       return routeRegexExp.test(rawPath);
     });
-  const locales = NextConfig.i18n?.locales;
+  const locales = globalThis.NextConfig.i18n?.locales;
   const routesAlreadyHaveLocale =
     (locales !== undefined && locales.includes(rawPath.split("/")[1])) ||
     // If we don't use locales, we don't need to add the default locale
     locales === undefined;
   const localizedPath = routesAlreadyHaveLocale
     ? rawPath
-    : `/${NextConfig.i18n?.defaultLocale}${rawPath}`;
+    : `/${globalThis.NextConfig.i18n?.defaultLocale}${rawPath}`;
   const isPregenerated = Object.keys(routes).includes(localizedPath);
   if (routeFallback && !isPregenerated) {
     return {

@@ -45,7 +45,6 @@ const externals = [
 export async function bundleNextServer(outputDir: string, appPath: string) {
   const require = topLevelCreateRequire(`${appPath}/package.json`);
   const entrypoint = require.resolve("next/dist/esm/server/next-server.js");
-
   await build({
     entryPoints: [entrypoint],
     bundle: true,

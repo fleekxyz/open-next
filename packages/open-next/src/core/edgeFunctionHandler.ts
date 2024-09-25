@@ -54,18 +54,27 @@ export default async function edgeFunctionHandler(
   request: EdgeRequest,
 ): Promise<Response> {
   const path = new URL(request.url).pathname;
+  console.log("Path:", path);
   const routes = globalThis._ROUTES;
   const correspondingRoute = routes.find((route) =>
     route.regex.some((r) => new RegExp(r).test(path)),
   );
+  console.log("Corresponding route:", correspondingRoute);
 
   if (!correspondingRoute) {
+    console.log("Routes:", JSON.stringify(routes, null, 2));
+    console.log("No route found for", JSON.stringify(request, null, 2));
     throw new Error(`No route found for ${request.url}`);
   }
 
-  const result = await self._ENTRIES[
-    `middleware_${correspondingRoute.name}`
-  ].default({
+  console.log("Entries:", JSON.stringify(globalThis._ENTRIES, null, 2));
+
+  const entry = self._ENTRIES[`middleware_${correspondingRoute.name}`];
+
+  console.log("self._ENTRIES", JSON.stringify(self._ENTRIES, null, 2));
+  console.log("Entry:", JSON.stringify(entry, null, 2));
+
+  const result = await entry.default({
     page: correspondingRoute.page,
     request: {
       ...request,
@@ -74,7 +83,12 @@ export default async function edgeFunctionHandler(
       },
     },
   });
+
+  console.log("Result:", JSON.stringify(result, null, 2));
+
   await result.waitUntil;
   const response = result.response;
   return response;
 }
+
+export { edgeFunctionHandler as main };

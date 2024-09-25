@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire as topLevelCreateRequire } from "node:module";
 
+import { Plugin } from "esbuild";
 import fs from "fs";
 import path from "path";
 import {
@@ -8,13 +9,23 @@ import {
   OpenNextConfig,
   SplittedFunctionOptions,
 } from "types/open-next";
-import url from "url";
+import url, { fileURLToPath } from "url";
 
+import {
+  loadAppPathsManifestKeys,
+  loadBuildId,
+  loadConfig,
+  loadConfigHeaders,
+  loadHtmlPages,
+  loadMiddlewareManifest,
+  loadPrerenderManifest,
+  // loadPublicAssets,
+  loadRoutesManifest,
+} from "../adapters/config/util.js";
 import { compileCache } from "../build.js";
 import logger from "../logger.js";
 import { minifyAll } from "../minimize-js.js";
 import { openNextReplacementPlugin } from "../plugins/replacement.js";
-import { openNextResolvePlugin } from "../plugins/resolve.js";
 import { bundleNextServer } from "./bundleNextServer.js";
 import { copyTracedFiles } from "./copyTracedFiles.js";
 import { generateEdgeBundle } from "./edge/createEdgeBundle.js";
@@ -198,13 +209,69 @@ async function generateBundle(
     compareSemver(options.nextVersion, "13.5.1") >= 0 ||
     compareSemver(options.nextVersion, "13.4.1") <= 0;
 
-  const overrides = fnOptions.override ?? {};
-
   const isBefore13413 = compareSemver(options.nextVersion, "13.4.13") <= 0;
   const isAfter141 = compareSemver(options.nextVersion, "14.0.4") >= 0;
 
   const disableRouting = isBefore13413 || config.middleware?.external;
-  const plugins = [
+  const plugins: Plugin[] = [
+    {
+      name: "replace-async-local-storage",
+      setup(build) {
+        build.onResolve({ filter: /async_hooks/ }, (args) => {
+          if (args.path === "async_hooks" || args.path === "node:async_hooks") {
+            return {
+              path: path.resolve(
+                path.dirname(fileURLToPath(import.meta.url)),
+                "edge",
+                "polyfill",
+                "async_hooks.js",
+              ),
+              namespace: "replace-als",
+            };
+          }
+        });
+
+        build.onLoad(
+          { filter: /.*/, namespace: "replace-als" },
+          async (args) => {
+            const contents = await fs.promises.readFile(args.path, "utf8");
+            return {
+              contents,
+              loader: "js",
+            };
+          },
+        );
+      },
+    },
+    {
+      name: "replace-file-system",
+      setup(build) {
+        build.onResolve({ filter: /fs/ }, (args) => {
+          if (args.path === "fs" || args.path === "node:fs") {
+            return {
+              path: path.resolve(
+                path.dirname(fileURLToPath(import.meta.url)),
+                "edge",
+                "polyfill",
+                "fs.js",
+              ),
+              namespace: "replace-fs",
+            };
+          }
+        });
+
+        build.onLoad(
+          { filter: /.*/, namespace: "replace-fs" },
+          async (args) => {
+            const contents = await fs.promises.readFile(args.path, "utf8");
+            return {
+              contents,
+              loader: "js",
+            };
+          },
+        );
+      },
+    },
     openNextReplacementPlugin({
       name: `requestHandlerOverride ${name}`,
       target: /core(\/|\\)requestHandler\.js/g,
@@ -228,11 +295,33 @@ async function generateBundle(
         ...(isAfter141 ? ["experimentalIncrementalCacheHandler"] : []),
       ],
     }),
+    {
+      name: "replace-open-next-config",
+      setup(build) {
+        build.onResolve({ filter: /\.\/dummy\.config/ }, () => {
+          const openNextConfigPath = path.join(
+            outputPath,
+            packagePath,
+            "open-next.config.mjs",
+          );
+          return {
+            path: openNextConfigPath,
+            namespace: "replace-onc",
+          };
+        });
 
-    openNextResolvePlugin({
-      fnName: name,
-      overrides: overrides,
-    }),
+        build.onLoad(
+          { filter: /.*/, namespace: "replace-onc" },
+          async (args) => {
+            const contents = fs.readFileSync(args.path, "utf-8");
+            return {
+              contents,
+              loader: "js",
+            };
+          },
+        );
+      },
+    },
   ];
 
   if (plugins && plugins.length > 0) {
@@ -244,28 +333,51 @@ async function generateBundle(
   }
 
   const outfileExt = fnOptions.runtime === "deno" ? "ts" : "mjs";
+  console.log("createServerBundle:239");
+  const nextDir = path.join(appPath, ".next");
+  const NextConfig = loadConfig(nextDir);
+  const BuildId = loadBuildId(nextDir);
+  const HtmlPages = loadHtmlPages(nextDir);
+  const RoutesManifest = loadRoutesManifest(nextDir);
+  const ConfigHeaders = loadConfigHeaders(nextDir);
+  const PrerenderManifest = loadPrerenderManifest(nextDir);
+  const AppPathsManifestKeys = loadAppPathsManifestKeys(nextDir);
+  const MiddlewareManifest = loadMiddlewareManifest(nextDir);
+
+  console.log("createServerBundle:261");
   await esbuildAsync(
     {
       entryPoints: [path.join(__dirname, "../adapters", "server-adapter.js")],
-      external: ["next", "./middleware.mjs", "./next-server.runtime.prod.js"],
+      // external: ["next", "./middleware.mjs", "./next-server.runtime.prod.js"],
       outfile: path.join(outputPath, packagePath, `index.${outfileExt}`),
       banner: {
         js: [
+          `
+globalThis.NextConfig = ${JSON.stringify(NextConfig)};
+globalThis.BuildId = ${JSON.stringify(BuildId)};
+globalThis.HtmlPages = ${JSON.stringify(HtmlPages)};
+globalThis.RoutesManifest = ${JSON.stringify(RoutesManifest)};
+globalThis.ConfigHeaders = ${JSON.stringify(ConfigHeaders)};
+globalThis.PrerenderManifest = ${JSON.stringify(PrerenderManifest)};
+globalThis.AppPathsManifestKeys = ${JSON.stringify(AppPathsManifestKeys)};
+globalThis.MiddlewareManifest = ${JSON.stringify(MiddlewareManifest)};
+          `,
           `globalThis.monorepoPackagePath = "${packagePath}";`,
-          "import process from 'node:process';",
           "import { Buffer } from 'node:buffer';",
-          "import { createRequire as topLevelCreateRequire } from 'module';",
-          "const require = topLevelCreateRequire(import.meta.url);",
-          "import bannerUrl from 'url';",
+          "import bannerUrl from 'node:url';",
           "const __dirname = bannerUrl.fileURLToPath(new URL('.', import.meta.url));",
           name === "default" ? "" : `globalThis.fnName = "${name}";`,
         ].join(""),
       },
       plugins,
       alias: {
-        "next/dist/server/next-server.js": isBundled
-          ? "./next-server.runtime.prod.js"
-          : "next/dist/server/next-server.js",
+        path: "node:path",
+        crypto: "node:crypto",
+        stream: "node:stream",
+        // "next/dist/server/next-server.js": isBundled
+        //   ? "./next-server.runtime.prod.js"
+        //   : "next/dist/server/next-server.js",
+        "middleware.mjs": path.join(outputPath, packagePath, "middleware.mjs"),
       },
     },
     options,

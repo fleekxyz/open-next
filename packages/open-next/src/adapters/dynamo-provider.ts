@@ -1,7 +1,8 @@
 import { readFileSync } from "fs";
 
+import upstashTagCache from "../cache/tag/upstash";
+import { fleekInitializationFunctionEventConverter } from "../converters/fleek.js";
 import { createGenericHandler } from "../core/createGenericHandler.js";
-import { resolveTagCache } from "../core/resolve.js";
 
 const PHYSICAL_RESOURCE_ID = "dynamodb-cache" as const;
 
@@ -24,12 +25,11 @@ export interface InitializationFunctionEvent {
   resourceId: typeof PHYSICAL_RESOURCE_ID;
 }
 
-const tagCache = await resolveTagCache(
-  globalThis.openNextConfig?.initializationFunction?.tagCache,
-);
+const tagCache = upstashTagCache;
 
-export const handler = await createGenericHandler({
+export const main = await createGenericHandler({
   handler: defaultHandler,
+  converter: fleekInitializationFunctionEventConverter,
   type: "initializationFunction",
 });
 

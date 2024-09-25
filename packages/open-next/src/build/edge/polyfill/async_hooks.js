@@ -1,80 +1,46 @@
-class AsyncContextFrame {
-    static currentFrame = null;
-  
-    constructor(parent = null, storageContext = new Map()) {
-      this.parent = parent;
-      this.storageContext = new Map(storageContext);
-    }
-  
-    static current() {
-      return AsyncContextFrame.currentFrame || new AsyncContextFrame();
-    }
-  
-    static run(storageKey, value, fn) {
-      const current = AsyncContextFrame.current();
-      const newFrame = new AsyncContextFrame(current, current.storageContext);
-      newFrame.storageContext.set(storageKey, value);
-  
-      const oldFrame = AsyncContextFrame.exchange(newFrame);
-      try {
-        return fn();
-      } finally {
-        AsyncContextFrame.exchange(oldFrame);
-      }
-    }
-  
-    static exchange(newFrame) {
-      const oldFrame = AsyncContextFrame.currentFrame;
-      AsyncContextFrame.currentFrame = newFrame;
-      return oldFrame;
-    }
-  
-    get(key) {
-      return this.storageContext.get(key);
-    }
-  }
-  
-  export class AsyncLocalStorage {
+const async_hooks = {
+  createHook: (_callbacks) => {
+    return {
+      enable: () => {},
+      disable: () => {},
+    };
+  },
+  executionAsyncId: () => 0,
+  triggerAsyncId: () => 0,
+  executionAsyncResource: () => null,
+  AsyncLocalStorage: class {
     constructor() {
-      this.storageKey = {};
+      this.store = undefined;
     }
-  
-    run(store, fn, ...args) {
-      return AsyncContextFrame.run(this.storageKey, store, () => fn(...args));
-    }
-  
+
     getStore() {
-      return AsyncContextFrame.current().get(this.storageKey);
+      return this.store;
     }
-  
-    exit(fn) {
-      return this.run(undefined, fn);
-    }
-  }
-  
-  export class AsyncResource {
-    constructor(type, options = {}) {
-      this.frame = AsyncContextFrame.current();
-      this.type = type;
-    }
-  
-    runInAsyncScope(fn, thisArg, ...args) {
-      const oldFrame = AsyncContextFrame.exchange(this.frame);
+
+    run(store, callback, ...args) {
+      this.store = store;
       try {
-        return fn.apply(thisArg, args);
+        return callback(...args);
       } finally {
-        AsyncContextFrame.exchange(oldFrame);
+        this.store = undefined;
       }
     }
-  
-    bind(fn, thisArg = null) {
-      return (...args) => this.runInAsyncScope(fn, thisArg, ...args);
+
+    exit(callback, ...args) {
+      const previousStore = this.store;
+      this.store = undefined;
+      try {
+        return callback(...args);
+      } finally {
+        this.store = previousStore;
+      }
     }
-  
-    static bind(fn, type = "default", thisArg = null) {
-      const resource = new AsyncResource(type);
-      return resource.bind(fn, thisArg);
+
+    enterWith(store) {
+      this.store = store;
     }
-  }
-  
-  globalThis.AsyncLocalStorage = AsyncLocalStorage;
+  },
+};
+
+globalThis.AsyncLocalStorage = async_hooks.AsyncLocalStorage;
+module.exports = async_hooks;

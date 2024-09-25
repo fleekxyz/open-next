@@ -1,6 +1,6 @@
-import { ReadableStream } from "node:stream/web";
-
-import { MiddlewareManifest, NextConfig } from "config/index.js";
+// @ts-expect-error - This is bundled
+import middleware from "middleware.mjs";
+import { MiddlewareManifest, NextConfig } from "types/next-types.js";
 import { InternalEvent, InternalResult } from "types/open-next.js";
 import { emptyReadableStream } from "utils/stream.js";
 
@@ -18,9 +18,12 @@ import {
   isExternal,
 } from "./util.js";
 
-const middlewareManifest = MiddlewareManifest;
+declare global {
+  var NextConfig: NextConfig;
+  var middlewareManifest: MiddlewareManifest;
+}
 
-const middleMatch = getMiddlewareMatch(middlewareManifest);
+const middleMatch = getMiddlewareMatch(globalThis.middlewareManifest);
 
 type MiddlewareOutputEvent = InternalEvent & {
   responseHeaders?: Record<string, string | string[]>;
@@ -37,7 +40,7 @@ type MiddlewareOutputEvent = InternalEvent & {
 function normalizeLocalePath(pathname: string) {
   // first item will be empty string from splitting at first char
   const pathnameParts = pathname.split("/");
-  const locales = NextConfig.i18n?.locales;
+  const locales = globalThis.NextConfig.i18n?.locales;
 
   (locales || []).some((locale) => {
     if (
@@ -73,9 +76,6 @@ export async function handleMiddleware(
   const url = initialUrl.toString();
   // console.log("url", url, normalizedPath);
 
-  // @ts-expect-error - This is bundled
-  const middleware = await import("./middleware.mjs");
-
   const result: Response = await middleware.default({
     geo: {
       city: internalEvent.headers["x-open-next-city"],
@@ -86,10 +86,10 @@ export async function handleMiddleware(
     },
     headers: internalEvent.headers,
     method: internalEvent.method || "GET",
-    nextConfig: {
-      basePath: NextConfig.basePath,
-      i18n: NextConfig.i18n,
-      trailingSlash: NextConfig.trailingSlash,
+    NextConfig: {
+      basePath: globalThis.NextConfig.basePath,
+      i18n: globalThis.NextConfig.i18n,
+      trailingSlash: globalThis.NextConfig.trailingSlash,
     },
     url,
     body: convertBodyToReadableStream(internalEvent.method, internalEvent.body),

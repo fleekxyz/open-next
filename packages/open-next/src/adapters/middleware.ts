@@ -1,83 +1,87 @@
-import { InternalEvent, Origin, OriginResolver } from "types/open-next";
+import {
+  InternalEvent,
+  InternalResult,
+  Origin,
+  OriginResolver,
+} from "types/open-next";
 
 import { debug, error } from "../adapters/logger";
+// import ipfsIncrementalCache from "../cache/incremental/ipfs";
+import upstashTagCache from "../cache/tag/upstash";
+import { fleekMiddlewareEventConverter } from "../converters/fleek";
 import { createGenericHandler } from "../core/createGenericHandler";
-import {
-  resolveIncrementalCache,
-  resolveQueue,
-  resolveTagCache,
-} from "../core/resolve";
-import routingHandler from "../core/routingHandler";
+import routingHandler, { MiddlewareOutputEvent } from "../core/routingHandler";
+import fleekQueue from "../queue/fleek";
 
 const resolveOriginResolver = () => {
   const openNextParams = globalThis.openNextConfig.middleware;
   if (typeof openNextParams?.originResolver === "function") {
     return openNextParams.originResolver();
-  } else {
-    return Promise.resolve<OriginResolver>({
-      name: "env",
-      resolve: async (_path: string) => {
-        try {
-          const origin = JSON.parse(
-            process.env.OPEN_NEXT_ORIGIN ?? "{}",
-          ) as Record<string, Origin>;
-          for (const [key, value] of Object.entries(
-            globalThis.openNextConfig.functions ?? {},
-          ).filter(([key]) => key !== "default")) {
-            if (
-              value.patterns.some((pattern) => {
-                // Convert cloudfront pattern to regex
-                return new RegExp(
-                  // transform glob pattern to regex
-                  "/" +
-                    pattern
-                      .replace(/\*\*/g, "(.*)")
-                      .replace(/\*/g, "([^/]*)")
-                      .replace(/\//g, "\\/")
-                      .replace(/\?/g, "."),
-                ).test(_path);
-              })
-            ) {
-              debug("Using origin", key, value.patterns);
-              return origin[key];
-            }
-          }
-          if (_path.startsWith("/_next/image") && origin["imageOptimizer"]) {
-            debug("Using origin", "imageOptimizer", _path);
-            return origin["imageOptimizer"];
-          }
-          if (origin["default"]) {
-            debug("Using default origin", origin["default"], _path);
-            return origin["default"];
-          }
-          return false as const;
-        } catch (e) {
-          error("Error while resolving origin", e);
-          return false as const;
-        }
-      },
-    });
   }
+
+  return Promise.resolve<OriginResolver>({
+    name: "env",
+    resolve: async (_path: string) => {
+      try {
+        const origin = JSON.parse(
+          process.env.OPEN_NEXT_ORIGIN ?? "{}",
+        ) as Record<string, Origin>;
+        for (const [key, value] of Object.entries(
+          globalThis.openNextConfig.functions ?? {},
+        ).filter(([key]) => key !== "default")) {
+          if (
+            value.patterns.some((pattern) => {
+              // Convert cloudfront pattern to regex
+              return new RegExp(
+                // transform glob pattern to regex
+                "/" +
+                  pattern
+                    .replace(/\*\*/g, "(.*)")
+                    .replace(/\*/g, "([^/]*)")
+                    .replace(/\//g, "\\/")
+                    .replace(/\?/g, "."),
+              ).test(_path);
+            })
+          ) {
+            debug("Using origin", key, value.patterns);
+            return origin[key];
+          }
+        }
+        if (_path.startsWith("/_next/image") && origin["imageOptimizer"]) {
+          debug("Using origin", "imageOptimizer", _path);
+          return origin["imageOptimizer"];
+        }
+        if (origin["default"]) {
+          debug("Using default origin", origin["default"], _path);
+          return origin["default"];
+        }
+        return false as const;
+      } catch (e) {
+        error("Error while resolving origin", e);
+        return false as const;
+      }
+    },
+  });
 };
 
 globalThis.internalFetch = fetch;
 
-const defaultHandler = async (internalEvent: InternalEvent) => {
+const defaultHandler = async (
+  internalEvent: InternalEvent,
+): Promise<
+  InternalResult | ({ type: "middleware" } & MiddlewareOutputEvent)
+> => {
+  console.log("middleware", { internalEvent });
+
   const originResolver = await resolveOriginResolver();
 
   //#override includeCacheInMiddleware
-  globalThis.tagCache = await resolveTagCache(
-    globalThis.openNextConfig.middleware?.override?.tagCache,
-  );
-
-  globalThis.queue = await resolveQueue(
-    globalThis.openNextConfig.middleware?.override?.queue,
-  );
-
-  globalThis.incrementalCache = await resolveIncrementalCache(
-    globalThis.openNextConfig.middleware?.override?.incrementalCache,
-  );
+  globalThis.tagCache = upstashTagCache;
+  globalThis.queue = fleekQueue;
+  // globalThis.incrementalCache = ipfsIncrementalCache;
   //#endOverride
+
+  console.log("originResolver", originResolver);
 
   const result = await routingHandler(internalEvent);
   if ("internalEvent" in result) {
@@ -99,11 +103,12 @@ const defaultHandler = async (internalEvent: InternalEvent) => {
   }
 };
 
-export const handler = await createGenericHandler({
+export const main = await createGenericHandler({
   handler: defaultHandler,
+  converter: fleekMiddlewareEventConverter,
   type: "middleware",
 });
 
 export default {
-  fetch: handler,
+  fetch: main,
 };

@@ -57,6 +57,7 @@ export function esbuildSync(
   options: BuildOptions,
 ) {
   const { openNextVersion, debug } = options;
+  console.log("esbuild sync", esbuildOptions.outfile);
   const result = buildSync({
     target: "esnext",
     format: "esm",
@@ -93,6 +94,7 @@ export async function esbuildAsync(
   options: BuildOptions,
 ) {
   const { openNextVersion, debug } = options;
+  console.log("esbuild async", esbuildOptions.outfile);
   const result = await buildAsync({
     target: "esnext",
     format: "esm",

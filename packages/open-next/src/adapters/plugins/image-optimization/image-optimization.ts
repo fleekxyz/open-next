@@ -1,6 +1,5 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 
-import { APIGatewayProxyEventHeaders } from "aws-lambda";
 import { NextConfig } from "next/dist/server/config-shared";
 //#override imports
 import { imageOptimizer } from "next/dist/server/image-optimizer";
@@ -11,7 +10,7 @@ import { debug } from "../../logger.js";
 
 //#override optimizeImage
 export async function optimizeImage(
-  headers: APIGatewayProxyEventHeaders,
+  headers: Record<string, string>,
   imageParams: any,
   nextConfig: NextConfig,
   handleRequest: (

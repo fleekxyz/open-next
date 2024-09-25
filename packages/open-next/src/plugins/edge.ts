@@ -19,7 +19,6 @@ export interface IPluginSettings {
   nextDir: string;
   edgeFunctionHandlerPath?: string;
   middlewareInfo: MiddlewareInfo;
-  useFilesystem?: boolean;
 }
 
 /**
@@ -32,11 +31,11 @@ export function openNextEdgePlugins({
   nextDir,
   edgeFunctionHandlerPath,
   middlewareInfo,
-  useFilesystem,
 }: IPluginSettings): Plugin {
   const entryFiles = middlewareInfo.files.map((file: string) =>
     path.join(nextDir, file),
   );
+
   const routes = [
     {
       name: middlewareInfo.name || "/",
@@ -100,64 +99,12 @@ globalThis._ROUTES = ${JSON.stringify(routes)};
 import {Buffer} from "node:buffer";
 globalThis.Buffer = Buffer;
 
-// import {AsyncLocalStorage} from "node:async_hooks";
-// globalThis.AsyncLocalStorage = AsyncLocalStorage;
-
 import crypto from "node:crypto";
 if(!globalThis.crypto){
   globalThis.crypto = crypto;
 }
-${
-  useFilesystem
-    ? ``
-    : `
-import {readFileSync} from "node:fs";
-import path from "node:path";
-function addDuplexToInit(init) {
-  return typeof init === 'undefined' ||
-    (typeof init === 'object' && init.duplex === undefined)
-    ? { duplex: 'half', ...init }
-    : init
-}
-// We need to override Request to add duplex to the init, it seems Next expects it to work like this
-class OverrideRequest extends Request {
-  constructor(input, init) {
-    super(input, addDuplexToInit(init))
-  }
-}
-globalThis.Request = OverrideRequest;
-
-// If we're not in cloudflare, we polyfill crypto
-// https://github.com/vercel/edge-runtime/blob/main/packages/primitives/src/primitives/crypto.js
-import { webcrypto } from 'node:crypto'
-if(!globalThis.crypto){
-  globalThis.crypto = new webcrypto.Crypto()
-}
-if(!globalThis.CryptoKey){
-  globalThis.CryptoKey = webcrypto.CryptoKey
-}
-function SubtleCrypto() {
-  if (!(this instanceof SubtleCrypto)) return new SubtleCrypto()
-  throw TypeError('Illegal constructor')
-}
-if(!globalThis.SubtleCrypto) {
-  globalThis.SubtleCrypto = SubtleCrypto
-}
-if(!globalThis.Crypto) {
-  globalThis.Crypto = webcrypto.Crypto
-}
-// We also need to polyfill URLPattern
-if (!globalThis.URLPattern) { 
-  await import("urlpattern-polyfill");
-}
-`
-}
 ${wasmFiles
-  .map((file) =>
-    useFilesystem
-      ? `import ${file.name} from './wasm/${file.name}.wasm';`
-      : `const ${file.name} = readFileSync(path.join(__dirname,'/wasm/${file.name}.wasm'));`,
-  )
+  .map((file) => `import ${file.name} from './wasm/${file.name}.wasm';`)
   .join("\n")}
 ${entryFiles?.map((file) => `require("${file}");`).join("\n")}
 ${contents}        

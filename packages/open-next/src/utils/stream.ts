@@ -1,6 +1,3 @@
-import { Readable } from "node:stream";
-import type { ReadableStream } from "node:stream/web";
-
 export function fromReadableStream(
   stream: ReadableStream<Uint8Array>,
   base64?: boolean,
@@ -30,14 +27,27 @@ export function toReadableStream(
   value: string,
   isBase64?: boolean,
 ): ReadableStream {
-  return Readable.toWeb(
-    Readable.from(Buffer.from(value, isBase64 ? "base64" : "utf8")),
-  );
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(Buffer.from(value, isBase64 ? "base64" : "utf8"));
+      controller.close();
+    },
+  });
+
+  return readable;
 }
 
 export function emptyReadableStream(): ReadableStream {
-  if (process.env.OPEN_NEXT_FORCE_NON_EMPTY_RESPONSE === "true") {
-    return Readable.toWeb(Readable.from([Buffer.from("SOMETHING")]));
-  }
-  return Readable.toWeb(Readable.from([]));
+  const readable = new ReadableStream({
+    start(controller) {
+      if (process.env.OPEN_NEXT_FORCE_NON_EMPTY_RESPONSE === "true") {
+        controller.enqueue(Buffer.from("SOMETHING"));
+      } else {
+        controller.enqueue([]);
+      }
+      controller.close();
+    },
+  });
+
+  return readable;
 }

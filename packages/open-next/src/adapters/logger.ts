@@ -14,43 +14,9 @@ export function warn(...args: any[]) {
   console.warn(...args);
 }
 
-interface AwsSdkClientCommandErrorLog {
-  clientName: string;
-  commandName: string;
-  error: Error & { Code?: string };
-}
-
-type AwsSdkClientCommandErrorInput = Pick<
-  AwsSdkClientCommandErrorLog,
-  "clientName" | "commandName"
-> & {
-  errorName: string;
-};
-
-const DOWNPLAYED_ERROR_LOGS: AwsSdkClientCommandErrorInput[] = [
-  {
-    clientName: "S3Client",
-    commandName: "GetObjectCommand",
-    errorName: "NoSuchKey",
-  },
-];
-
-const isDownplayedErrorLog = (errorLog: AwsSdkClientCommandErrorLog) =>
-  DOWNPLAYED_ERROR_LOGS.some(
-    (downplayedInput) =>
-      downplayedInput.clientName === errorLog?.clientName &&
-      downplayedInput.commandName === errorLog?.commandName &&
-      (downplayedInput.errorName === errorLog?.error?.name ||
-        downplayedInput.errorName === errorLog?.error?.Code),
-  );
-
 export function error(...args: any[]) {
   // we try to catch errors from the aws-sdk client and downplay some of them
-  if (
-    args.some((arg: AwsSdkClientCommandErrorLog) => isDownplayedErrorLog(arg))
-  ) {
-    debug(...args);
-  } else if (args.some((arg) => arg.__openNextInternal)) {
+  if (args.some((arg) => arg.__openNextInternal)) {
     // In case of an internal error, we log it with the appropriate log level
     const error = args.find(
       (arg) => arg.__openNextInternal,

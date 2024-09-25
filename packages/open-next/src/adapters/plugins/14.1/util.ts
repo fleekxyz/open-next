@@ -1,11 +1,11 @@
-import { NextConfig } from "../../config";
 import { debug } from "../../logger.js";
 
 //#override requestHandler
 // @ts-ignore
 export const requestHandler = new NextServer.default({
   conf: {
-    ...NextConfig,
+    // @ts-ignore
+    ...globalThis.NextConfig,
     // Next.js compression should be disabled because of a bug in the bundled
     // `compression` package — https://github.com/vercel/next.js/issues/11669
     compress: false,
@@ -14,7 +14,8 @@ export const requestHandler = new NextServer.default({
     cacheHandler: `${process.env.LAMBDA_TASK_ROOT}/cache.cjs`,
     cacheMaxMemorySize: 0,
     experimental: {
-      ...NextConfig.experimental,
+      // @ts-ignore
+      ...globalThis.NextConfig.experimental,
       // This uses the request.headers.host as the URL
       // https://github.com/vercel/next.js/blob/canary/packages/next/src/server/next-server.ts#L1749-L1754
       trustHostHeader: true,

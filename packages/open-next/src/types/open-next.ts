@@ -1,5 +1,4 @@
 import type { Readable } from "node:stream";
-import type { ReadableStream } from "node:stream/web";
 
 import type { StreamCreator } from "http/index.js";
 
@@ -26,7 +25,7 @@ export type InternalEvent = {
 export type InternalResult = {
   statusCode: number;
   headers: Record<string, string | string[]>;
-  body: ReadableStream;
+  body: ReadableStream<Uint8Array>;
   isBase64Encoded: boolean;
 } & BaseEventOrResult<"core">;
 

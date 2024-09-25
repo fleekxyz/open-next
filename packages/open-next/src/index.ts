@@ -10,7 +10,7 @@ if (command !== "build") printHelp();
 const args = parseArgs();
 if (Object.keys(args).includes("--help")) printHelp();
 
-build({
+await build({
   openNextConfigPath: args["--config-path"],
   nodeExternals: args["--node-externals"],
   skipBuild: args["--skip-build"] === "true",

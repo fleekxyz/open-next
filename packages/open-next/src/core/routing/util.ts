@@ -1,8 +1,6 @@
 import crypto from "node:crypto";
 import { OutgoingHttpHeaders } from "node:http";
-import { Readable } from "node:stream";
 
-import { BuildId, HtmlPages } from "config/index.js";
 import type { IncomingMessage, StreamCreator } from "http/index.js";
 import { OpenNextNodeResponse } from "http/openNextResponse.js";
 import { parseHeaders } from "http/util.js";
@@ -28,13 +26,10 @@ export function isExternal(url?: string, host?: string) {
 export function convertFromQueryString(query: string) {
   if (query === "") return {};
   const queryParts = query.split("&");
-  return queryParts.reduce(
-    (acc, part) => {
-      const [key, value] = part.split("=");
-      return { ...acc, [key]: value };
-    },
-    {} as Record<string, string>,
-  );
+  return queryParts.reduce((acc, part) => {
+    const [key, value] = part.split("=");
+    return { ...acc, [key]: value };
+  }, {} as Record<string, string>);
 }
 
 /**
@@ -83,7 +78,14 @@ export function convertRes(res: OpenNextNodeResponse): InternalResult {
   );
   // We cannot convert the OpenNextNodeResponse to a ReadableStream directly
   // You can look in the `aws-lambda.ts` file for some context
-  const body = Readable.toWeb(Readable.from(res.getBody()));
+
+  const body = new ReadableStream<Buffer>({
+    start(controller) {
+      controller.enqueue(res.getBody());
+      controller.close();
+    },
+  });
+
   return {
     type: "core",
     statusCode,
@@ -272,6 +274,8 @@ declare global {
   var openNextDebug: boolean;
   var openNextVersion: string;
   var lastModified: Record<string, number>;
+  var HtmlPages: string[];
+  var BuildId: string;
 }
 
 enum CommonHeaders {
@@ -294,7 +298,7 @@ export function fixCacheHeaderForHtmlPages(
     return;
   }
   // WORKAROUND: `NextServer` does not set cache headers for HTML pages — https://github.com/serverless-stack/open-next#workaround-nextserver-does-not-set-cache-headers-for-html-pages
-  if (HtmlPages.includes(rawPath)) {
+  if (globalThis.HtmlPages.includes(rawPath)) {
     headers[CommonHeaders.CACHE_CONTROL] =
       "public, max-age=0, s-maxage=31536000, must-revalidate";
   }
@@ -354,7 +358,7 @@ export async function revalidateIfRequired(
     // does not include the "/_next/data/" prefix. Need to add it.
     const revalidateUrl = internalMeta?._nextDidRewrite
       ? rawPath.startsWith("/_next/data/")
-        ? `/_next/data/${BuildId}${internalMeta?._nextRewroteUrl}.json`
+        ? `/_next/data/${globalThis.BuildId}${internalMeta?._nextRewroteUrl}.json`
         : internalMeta?._nextRewroteUrl
       : rawPath;
 

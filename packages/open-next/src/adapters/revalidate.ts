@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { createGenericHandler } from "../core/createGenericHandler.js";
 import { debug, error } from "./logger.js";
+import { fleekRevalidateEventConverter } from "../converters/fleek.js";
 
 const prerenderManifest = loadPrerenderManifest();
 
@@ -25,7 +26,7 @@ export interface RevalidateEvent {
   }[];
 }
 
-const defaultHandler = async (event: RevalidateEvent) => {
+const defaultHandler = async (event: RevalidateEvent): Promise<RevalidateEvent> => {
   const failedRecords: RevalidateEvent["records"] = [];
   for (const record of event.records) {
     const { host, url } = record;
@@ -89,8 +90,9 @@ const defaultHandler = async (event: RevalidateEvent) => {
   };
 };
 
-export const handler = await createGenericHandler({
+export const main = await createGenericHandler({
   handler: defaultHandler,
+  converter: fleekRevalidateEventConverter,
   type: "revalidate",
 });
 
